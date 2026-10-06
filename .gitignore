@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+
+# build / generated
+.svelte-kit/
+build/
+dist/
+.output/
+.vercel/
+.netlify/
+.wrangler/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# test
+test-results/
+playwright-report/
+e2e/artifacts/
+playwright/.cache/
+coverage/
+htmlcov/
+
+# secrets
+.env
+.env.*
+!.env.example
+!.env.test
+
+# os / editor
+.DS_Store
+Thumbs.db
+*.log
+.cursor/

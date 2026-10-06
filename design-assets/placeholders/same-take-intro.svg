@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="144" viewBox="0 0 256 144" role="img" aria-label="intro placeholder">
+  <rect width="256" height="144" fill="#d9d2c8"/>
+  <rect x="16" y="16" width="224" height="112" fill="none" stroke="#6b645c" stroke-width="2" stroke-dasharray="8 8"/>
+  <text x="128" y="80" text-anchor="middle" font-family="ui-monospace, monospace" font-size="20" fill="#6b645c" letter-spacing="2">INTRO</text>
+</svg>

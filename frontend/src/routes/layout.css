@@ -1,0 +1,176 @@
+@import 'tailwindcss';
+@import 'shadcn-svelte/tailwind.css';
+@import '@fontsource/atkinson-hyperlegible-next/400.css';
+@import '@fontsource/atkinson-hyperlegible-next/500.css';
+@import '@fontsource/atkinson-hyperlegible-next/600.css';
+@import '@fontsource/atkinson-hyperlegible-next/700.css';
+
+:root {
+	--background: #f4f1ec;
+	--foreground: #0a0a0a;
+	/* black text on bright orange (design.pen $primary) */
+	--primary: #ff8a33;
+	--primary-foreground: #0a0a0a;
+	/* 12px status text on page bg: 5.77:1 */
+	--primary-ink: #a83800;
+	--destructive: #b42318;
+	--ok: #1b7a34;
+	--muted: #6b645c;
+	--surface: #ffffff;
+	--soft: #ffe8da;
+	--line: #e5ded6;
+	--ink: #0a0a0a;
+	/* focus ring vs white surface: keep darker than button fill */
+	--focus-ring: #cc4800;
+}
+
+@theme inline {
+	--font-sans: 'Atkinson Hyperlegible Next', sans-serif;
+	--font-heading: 'Atkinson Hyperlegible Next', sans-serif;
+	--font-mono: 'Atkinson Hyperlegible Next', sans-serif;
+	--color-destructive: var(--destructive);
+	--color-ok: var(--ok);
+	--color-primary: var(--primary);
+	--color-primary-ink: var(--primary-ink);
+	--color-foreground: var(--foreground);
+	--color-background: var(--background);
+	--color-muted: var(--muted);
+	--color-surface: var(--surface);
+	--color-soft: var(--soft);
+	--color-line: var(--line);
+	--color-ink: var(--ink);
+}
+
+@layer base {
+	html {
+		color-scheme: light;
+		background: var(--background);
+		color: var(--foreground);
+		font-family: var(--font-sans);
+		font-size: 16px;
+		line-height: 24px;
+	}
+	body {
+		min-height: 100vh;
+		background: var(--background);
+		color: var(--foreground);
+	}
+	h1,
+	h2,
+	h3 {
+		font-family: var(--font-heading);
+		font-weight: 600;
+	}
+	::selection {
+		background: #ff5a00;
+		color: #ffffff;
+	}
+}
+
+@keyframes btn-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@layer components {
+	.btn-primary {
+		display: inline-flex;
+		height: 48px;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		border-radius: 8px;
+		background: var(--primary);
+		padding: 0 24px;
+		font-size: 16px;
+		line-height: 24px;
+		font-weight: 600;
+		color: var(--primary-foreground);
+	}
+	.btn-primary:disabled {
+		pointer-events: none;
+		opacity: 0.5;
+	}
+	.btn-primary.btn-busy,
+	.btn-primary.btn-busy:disabled {
+		background: var(--primary);
+		opacity: 1;
+		pointer-events: none;
+	}
+	.btn-spinner {
+		box-sizing: border-box;
+		width: 16px;
+		height: 16px;
+		flex: none;
+		border: 2px solid currentColor;
+		border-right-color: transparent;
+		border-radius: 8px;
+		animation: btn-spin 0.8s linear infinite;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.btn-spinner {
+			animation: none;
+			border-right-color: currentColor;
+			opacity: 0.64;
+		}
+	}
+	.btn-secondary {
+		display: inline-flex;
+		height: 48px;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		border: 1px solid var(--ink);
+		background: transparent;
+		padding: 0 24px;
+		font-size: 16px;
+		line-height: 24px;
+		font-weight: 500;
+		color: var(--ink);
+	}
+	.field-shell {
+		display: flex;
+		height: 48px;
+		align-items: center;
+		border-radius: 8px;
+		border: 1px solid var(--line);
+		background: var(--surface);
+		padding: 0 16px;
+		font-size: 16px;
+		line-height: 24px;
+	}
+	.field-file:has(> input:focus-visible) > .field-shell {
+		border-color: var(--focus-ring);
+		outline: 2px solid var(--focus-ring);
+		outline-offset: 0;
+	}
+	.field-input {
+		height: 48px;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid var(--line);
+		background: var(--surface);
+		padding: 0 16px;
+		font-size: 16px;
+		line-height: 24px;
+	}
+	.field-input:focus {
+		border-color: var(--primary);
+	}
+	.field-input:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: 0;
+	}
+	.eyebrow {
+		font-family: var(--font-mono);
+		font-size: 12px;
+		line-height: 16px;
+		letter-spacing: 0.08em;
+		color: var(--muted);
+	}
+	.eyebrow-required::after {
+		content: '*';
+		color: var(--destructive);
+	}
+}
