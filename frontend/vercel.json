@@ -1,9 +1,20 @@
 {
 	"$schema": "https://openapi.vercel.sh/vercel.json",
-	"rewrites": [
+	"routes": [
 		{
-			"source": "/api/:path*",
-			"destination": "https://wildcard-check-api.onrender.com/api/:path*"
+			"src": "/api/(.*)",
+			"dest": "https://wildcard-check-api.onrender.com/api/$1",
+			"transforms": [
+				{
+					"type": "request.headers",
+					"op": "set",
+					"target": {
+						"key": "x-origin-secret"
+					},
+					"args": "$ORIGIN_SECRET",
+					"env": ["ORIGIN_SECRET"]
+				}
+			]
 		}
 	]
 }

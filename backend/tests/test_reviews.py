@@ -3,12 +3,15 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import requests
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from app.domain.judge import Judge, is_yes
 from app.domain.review import Review
 from app.domain.youtube import YoutubeAccess
 from app.gateway.clef import data_url
 from app.gateway.yt_dlp_youtube import YtDlpYoutubeInspector
+from app.http.origin import guard, header
 from app.usecase.gate_youtube import GateYoutube
 from app.usecase.get_review import GetReview
 from app.usecase.record_agreement import RecordAgreement
@@ -552,6 +555,45 @@ class ClefImageTests(unittest.TestCase):
     def test_unknown_bytes_are_rejected(self):
         with self.assertRaises(ValueError):
             data_url(b"not-an-image")
+
+
+def guarded_client(secret: str) -> TestClient:
+    app = FastAPI()
+    guard(app, secret)
+
+    @app.get("/api/health")
+    def health():
+        return {"ok": True}
+
+    @app.get("/api/reviews/job")
+    def review():
+        return {"id": "job"}
+
+    return TestClient(app)
+
+
+class OriginGuardTests(unittest.TestCase):
+    def test_missing_header_is_rejected(self):
+        client = guarded_client("secret")
+        self.assertEqual(client.get("/api/reviews/job").status_code, 403)
+
+    def test_wrong_header_is_rejected(self):
+        client = guarded_client("secret")
+        response = client.get("/api/reviews/job", headers={header: "nope"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_matching_header_passes(self):
+        client = guarded_client("secret")
+        response = client.get("/api/reviews/job", headers={header: "secret"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_health_is_open(self):
+        client = guarded_client("secret")
+        self.assertEqual(client.get("/api/health").status_code, 200)
+
+    def test_empty_secret_disables_guard(self):
+        client = guarded_client("")
+        self.assertEqual(client.get("/api/reviews/job").status_code, 200)
 
 
 if __name__ == "__main__":
