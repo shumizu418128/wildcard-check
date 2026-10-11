@@ -1,24 +1,20 @@
-import hmac
+import secrets
+from collections.abc import Callable
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, Security
+from fastapi.security import APIKeyHeader
 
 header = "x-origin-secret"
-# Render のヘルスチェックはヘッダーを付けられない
-open_paths = frozenset({"/api/health"})
+scheme = APIKeyHeader(name=header, auto_error=False)
 
 
-def guard(app: FastAPI, secret: str) -> None:
-    """Vercel が付ける秘密ヘッダーのないリクエストを拒否する。secret が空なら素通しする。"""
-    if secret == "":
-        return
-    expected = secret.encode()
+def require_origin(secret: str) -> Callable[[str | None], None]:
+    """Vercel が付ける秘密ヘッダーを照合する依存関数を返す。secret が空なら素通しする。"""
 
-    @app.middleware("http")
-    async def check_origin(request: Request, call_next):
-        if request.url.path in open_paths:
-            return await call_next(request)
-        given = request.headers.get(header, "").encode()
-        if not hmac.compare_digest(given, expected):
-            return JSONResponse({"detail": "forbidden"}, status_code=403)
-        return await call_next(request)
+    def check(given: str | None = Security(scheme)) -> None:
+        if secret == "":
+            return
+        if given is None or not secrets.compare_digest(given.encode(), secret.encode()):
+            raise HTTPException(status_code=403, detail="forbidden")
+
+    return check

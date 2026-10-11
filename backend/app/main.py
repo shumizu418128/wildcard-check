@@ -1,7 +1,6 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-
 from app.gateway.clef import ClefJudge
 from app.gateway.config import origin_secret, require_supabase
 from app.gateway.ffmpeg_media import FfmpegMedia
@@ -9,7 +8,7 @@ from app.gateway.groq_whisper import GroqWhisper
 from app.gateway.supabase_review_repository import SupabaseReviewRepository
 from app.gateway.yt_dlp_youtube import YtDlpYoutubeInspector
 from app.http.controller import register
-from app.http.origin import guard
+from app.http.origin import require_origin
 from app.usecase.create_review import CreateReview
 from app.usecase.gate_youtube import GateYoutube
 from app.usecase.get_review import GetReview
@@ -35,6 +34,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Wildcard review", version="1.0.0", lifespan=lifespan)
-guard(app, origin_secret())
-register(app)
+secret = origin_secret()
+# 秘密ヘッダーの照合はルートにしか効かないので、本番ではドキュメントを出さない
+docs = secret == ""
+app = FastAPI(
+    title="Wildcard review",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs" if docs else None,
+    redoc_url="/redoc" if docs else None,
+    openapi_url="/openapi.json" if docs else None,
+)
+register(app, require_origin(secret))

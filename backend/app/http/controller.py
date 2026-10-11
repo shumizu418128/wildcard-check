@@ -1,7 +1,11 @@
 import asyncio
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import (
+    APIRouter,
     BackgroundTasks,
+    Depends,
     FastAPI,
     File,
     Form,
@@ -30,12 +34,15 @@ _BLOCKED_ACCESS: dict[YoutubeAccess, str] = {
 }
 
 
-def register(app: FastAPI) -> None:
+def register(app: FastAPI, origin: Callable[..., Any]) -> None:
+    # Render のヘルスチェックは秘密ヘッダーを付けられないので router に入れない
     @app.get("/api/health")
     def health():
         return {"ok": True, "debug": debug_enabled()}
 
-    @app.post("/api/reviews", status_code=201, response_model=ReviewResponse)
+    router = APIRouter(dependencies=[Depends(origin)])
+
+    @router.post("/api/reviews", status_code=201, response_model=ReviewResponse)
     async def create_review(
         request: Request,
         response: Response,
@@ -84,7 +91,7 @@ def register(app: FastAPI) -> None:
         response.headers["Location"] = f"/api/reviews/{review.id}"
         return present(ReviewView(review, []))
 
-    @app.get("/api/reviews/{review_id}", response_model=ReviewResponse)
+    @router.get("/api/reviews/{review_id}", response_model=ReviewResponse)
     def read_review(review_id: str, request: Request):
         get_review: GetReview = request.app.state.get_review
         view = get_review.execute(review_id)
@@ -92,7 +99,7 @@ def register(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="job")
         return present(view)
 
-    @app.get("/api/reviews/{review_id}/frames/{part}")
+    @router.get("/api/reviews/{review_id}/frames/{part}")
     def read_same_take_frame(review_id: str, part: str, request: Request):
         get_frame: GetSameTakeFrame = request.app.state.get_same_take_frame
         try:
@@ -107,7 +114,7 @@ def register(app: FastAPI) -> None:
             headers={"Cache-Control": "private, max-age=3600"},
         )
 
-    @app.post("/api/reviews/{review_id}/agreements", status_code=204)
+    @router.post("/api/reviews/{review_id}/agreements", status_code=204)
     def create_agreement(review_id: str, body: AgreementRequest, request: Request):
         rule_id = body.rule_id.strip()
         if rule_id == "":
@@ -116,3 +123,5 @@ def register(app: FastAPI) -> None:
         if not record.execute(review_id, rule_id):
             raise HTTPException(status_code=404, detail="job")
         return Response(status_code=204)
+
+    app.include_router(router)

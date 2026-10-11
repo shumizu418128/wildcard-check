@@ -5,13 +5,14 @@ from unittest.mock import MagicMock, patch
 import requests
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from app.domain.judge import Judge, is_yes
 from app.domain.review import Review
 from app.domain.youtube import YoutubeAccess
 from app.gateway.clef import data_url
 from app.gateway.yt_dlp_youtube import YtDlpYoutubeInspector
-from app.http.origin import guard, header
+from app.http.controller import register
+from app.http.origin import header, require_origin
+from app.usecase.create_review import CreateReview
 from app.usecase.gate_youtube import GateYoutube
 from app.usecase.get_review import GetReview
 from app.usecase.record_agreement import RecordAgreement
@@ -557,43 +558,51 @@ class ClefImageTests(unittest.TestCase):
             data_url(b"not-an-image")
 
 
-def guarded_client(secret: str) -> TestClient:
+class NoopRun:
+    def execute(self, data: ReviewInput) -> None:
+        pass
+
+
+def build_api(secret: str = "") -> FastAPI:
     app = FastAPI()
-    guard(app, secret)
+    register(app, require_origin(secret))
+    repository = MemoryRepository()
+    app.state.create_review = CreateReview(repository)
+    app.state.get_review = GetReview(repository, ())
+    app.state.run_reviews = NoopRun()
+    return app
 
-    @app.get("/api/health")
-    def health():
-        return {"ok": True}
 
-    @app.get("/api/reviews/job")
-    def review():
-        return {"id": "job"}
-
-    return TestClient(app)
+def post_file(client: TestClient, source: str = "file"):
+    return client.post(
+        "/api/reviews",
+        data={"category": "solo", "source": source},
+        files={"file": ("clip.mp4", b"video", "video/mp4")},
+    )
 
 
 class OriginGuardTests(unittest.TestCase):
     def test_missing_header_is_rejected(self):
-        client = guarded_client("secret")
-        self.assertEqual(client.get("/api/reviews/job").status_code, 403)
+        client = TestClient(build_api("secret"))
+        self.assertEqual(client.get("/api/reviews/none").status_code, 403)
 
     def test_wrong_header_is_rejected(self):
-        client = guarded_client("secret")
-        response = client.get("/api/reviews/job", headers={header: "nope"})
+        client = TestClient(build_api("secret"))
+        response = client.get("/api/reviews/none", headers={header: "nope"})
         self.assertEqual(response.status_code, 403)
 
     def test_matching_header_passes(self):
-        client = guarded_client("secret")
-        response = client.get("/api/reviews/job", headers={header: "secret"})
-        self.assertEqual(response.status_code, 200)
+        client = TestClient(build_api("secret"))
+        response = client.get("/api/reviews/none", headers={header: "secret"})
+        self.assertEqual(response.status_code, 404)
 
     def test_health_is_open(self):
-        client = guarded_client("secret")
+        client = TestClient(build_api("secret"))
         self.assertEqual(client.get("/api/health").status_code, 200)
 
     def test_empty_secret_disables_guard(self):
-        client = guarded_client("")
-        self.assertEqual(client.get("/api/reviews/job").status_code, 200)
+        client = TestClient(build_api(""))
+        self.assertEqual(client.get("/api/reviews/none").status_code, 404)
 
 
 if __name__ == "__main__":
