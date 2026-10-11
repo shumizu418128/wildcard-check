@@ -1,7 +1,10 @@
 import base64
+import logging
 import os
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 account_env = "CLOUDFLARE_ACCOUNT_ID"
 token_env = "CLOUDFLARE_API_TOKEN"
@@ -52,4 +55,11 @@ class ClefJudge:
         result = payload.get("result", payload) if isinstance(payload, dict) else None
         if not isinstance(result, dict):
             raise RuntimeError("clef")
+        logger.info(
+            "clef model=%s questions=%s images=%d result=%s",
+            model,
+            list(questions),
+            0 if images is None else len(images),
+            result,
+        )
         return result

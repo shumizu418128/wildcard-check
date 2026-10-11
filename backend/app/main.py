@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -35,6 +36,20 @@ async def lifespan(app: FastAPI):
     app.state.run_reviews = RunReviews(repository, ClefJudge(), rules)
     yield
 
+
+def configure_logging() -> None:
+    """アプリの INFO を stderr に出す。uvicorn 自身のロガーには流さない。"""
+    app_logger = logging.getLogger("app")
+    if app_logger.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(message)s"))
+    app_logger.addHandler(handler)
+    app_logger.setLevel(logging.INFO)
+    app_logger.propagate = False
+
+
+configure_logging()
 
 secret = origin_secret()
 # 秘密ヘッダーの照合はルートにしか効かないので、本番ではドキュメントを出さない

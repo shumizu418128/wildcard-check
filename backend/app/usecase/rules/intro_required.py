@@ -1,8 +1,12 @@
+import logging
+
 from app.domain.clips import ReviewClips
 from app.domain.judge import Judge, is_yes, noul
 from app.domain.media import MediaSource
 from app.domain.review import Review
 from app.domain.transcriber import Transcriber
+
+logger = logging.getLogger(__name__)
 
 INTRO_SECONDS = 30
 LANGUAGE = "en"
@@ -25,6 +29,12 @@ class IntroRequired:
         else:
             audio = self.media.audio(review, INTRO_SECONDS)
         transcript = self.transcriber.transcribe(audio, LANGUAGE).strip()
+        logger.info(
+            "intro whisper review_id=%s chars=%d text=%s",
+            review.id,
+            len(transcript),
+            transcript,
+        )
         if transcript == "":
             return False
         result = judge.decide(
@@ -40,4 +50,11 @@ class IntroRequired:
                 )
             },
         )
-        return is_yes(result, "intro")
+        passed = is_yes(result, "intro")
+        logger.info(
+            "intro decision review_id=%s passed=%s result=%s",
+            review.id,
+            passed,
+            result,
+        )
+        return passed

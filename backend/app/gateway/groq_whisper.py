@@ -1,6 +1,9 @@
+import logging
 import os
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 key_env = "GROQ_API_KEY"
 model_env = "GROQ_WHISPER_MODEL"
@@ -26,4 +29,11 @@ class GroqWhisper:
         text = response.json().get("text")
         if not isinstance(text, str):
             raise RuntimeError("groq")
+        logger.info(
+            "whisper model=%s language=%s audio_bytes=%d text=%s",
+            model,
+            language,
+            len(audio),
+            text,
+        )
         return text
