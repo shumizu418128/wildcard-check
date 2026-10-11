@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 
+from app.domain.clips import ReviewClips
 from app.domain.judge import Judge
 from app.domain.review import Review
 from app.domain.review_repository import ReviewRepository
@@ -15,7 +16,7 @@ from app.usecase.rule import Rule
 @dataclass
 class ReviewInput:
     review: Review
-    video: bytes | None
+    clips: ReviewClips | None = None
 
 
 class RunReviews:
@@ -36,14 +37,14 @@ class RunReviews:
                 if not rule.applies(review):
                     continue
                 ok = await asyncio.to_thread(
-                    rule.evaluate, review, review_input.video, self.judge
+                    rule.evaluate, review, review_input.clips, self.judge
                 )
                 await asyncio.to_thread(
                     self.repository.save_result, review.id, rule.id, ok
                 )
             await asyncio.to_thread(self.repository.mark_done, review.id)
         finally:
-            review_input.video = None
+            review_input.clips = None
 
     async def _save_debug_fixture(self, review: Review) -> None:
         """フィクスチャは実動画がないため審査を模擬する。SHORT-VIDEO だけ NO-SHORT を失敗させる。"""

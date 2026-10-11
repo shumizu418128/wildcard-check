@@ -21,4 +21,4 @@ class GetSameTakeFrame:
         review, _ = found
         if review.source != "youtube":
             return None
-        return self.media.frame(review, None, seconds)
+        return self.media.frame(review, seconds)

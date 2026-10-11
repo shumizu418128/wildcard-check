@@ -8,6 +8,7 @@ import {
 import { categories, sheet, type CategoryId, type RuleStatus, type SourceKind } from '$lib/sheet'
 import { fetchYoutubeTitle, titleMatches } from '$lib/title-format'
 import { ensureDebugMode } from '$lib/debug'
+import { extractReviewClips } from '$lib/extract-clips'
 import {
 	isNonPublicUrlCode,
 	isShortsUrl,
@@ -68,6 +69,7 @@ export class ReviewSession {
 	abortKind = $state<AbortKind | ''>('')
 	abortTitle = $state('')
 	premierePending = $state(false)
+	preparing = $state(false)
 	submitting = $state(false)
 	advancing = $state(false)
 	localVideoUrl = $state('')
@@ -140,15 +142,6 @@ export class ReviewSession {
 		this.jobId = ''
 		this.advancing = false
 
-		const body = new FormData()
-		body.set('category', this.category)
-		body.set('source', source)
-		if (source === 'youtube') {
-			body.set('youtube_url', youtubeUrl)
-			body.set('raw_url', rawUrl)
-		}
-		if (file) body.set('file', file)
-
 		try {
 			if (source === 'youtube' && !premiereFile && isShortsUrl(youtubeUrl)) {
 				this.abortReview(sheet.shortsUrlError, 'shorts')
@@ -162,6 +155,21 @@ export class ReviewSession {
 					return
 				}
 			}
+			const body = new FormData()
+			body.set('category', this.category)
+			body.set('source', source)
+			if (source === 'youtube') {
+				body.set('youtube_url', youtubeUrl)
+				body.set('raw_url', rawUrl)
+			}
+			if (file && (premiereFile || source === 'file')) {
+				this.preparing = true
+				const clips = await extractReviewClips(file)
+				body.set('intro_audio', clips.introAudio, 'intro.wav')
+				body.set('intro_frame', clips.introFrame, 'intro.jpg')
+				body.set('routine_frame', clips.routineFrame, 'routine.jpg')
+			}
+			this.preparing = false
 			this.releaseLocalVideo()
 			if (file) this.localVideoUrl = URL.createObjectURL(file)
 			this.stopWatch()
@@ -199,6 +207,7 @@ export class ReviewSession {
 			this.releaseLocalVideo()
 			this.error = sheet.startError
 		} finally {
+			this.preparing = false
 			this.submitting = false
 		}
 	}
@@ -206,6 +215,7 @@ export class ReviewSession {
 	dismissPremiere = () => {
 		this.premierePending = false
 		this.error = ''
+		this.preparing = false
 		this.submitting = false
 	}
 
@@ -546,6 +556,7 @@ export class ReviewSession {
 		this.abortKind = ''
 		this.abortTitle = ''
 		this.premierePending = false
+		this.preparing = false
 		this.submitting = false
 	}
 

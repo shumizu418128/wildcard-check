@@ -153,6 +153,10 @@
 		</div>
 	{/if}
 
+	{#if session.preparing}
+		<p class="text-[16px] leading-6 text-muted" data-testid="preparing-clips">{sheet.preparingClips}</p>
+	{/if}
+
 	{#if session.error}
 		<p class="text-[16px] leading-6 text-destructive" role="alert">{session.error}</p>
 	{/if}

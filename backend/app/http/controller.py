@@ -18,6 +18,7 @@ from fastapi import (
 from app.domain.review import ReviewView, Source
 from app.domain.youtube import YoutubeAccess
 from app.gateway.config import debug_enabled
+from app.http.clips import read_review_clips
 from app.http.presenter import present
 from app.http.schema import AgreementRequest, ReviewResponse
 from app.usecase.create_review import CreateReview
@@ -51,7 +52,9 @@ def register(app: FastAPI, origin: Callable[..., Any]) -> None:
         source: str = Form(...),
         youtube_url: str = Form(""),
         raw_url: str = Form(""),
-        file: UploadFile | None = File(None),
+        intro_audio: UploadFile | None = File(None),
+        intro_frame: UploadFile | None = File(None),
+        routine_frame: UploadFile | None = File(None),
     ):
         if source not in ("file", "youtube"):
             raise HTTPException(status_code=400, detail="source")
@@ -62,32 +65,37 @@ def register(app: FastAPI, origin: Callable[..., Any]) -> None:
             raise HTTPException(status_code=400, detail="youtube_url")
         if source_kind == "youtube" and raw_url == "":
             raise HTTPException(status_code=400, detail="raw_url")
-        if source_kind == "file" and file is None:
-            raise HTTPException(status_code=400, detail="file")
 
-        video: bytes | None = None
-        if file is not None:
-            video = await file.read()
-
+        access: YoutubeAccess | None = None
         if source_kind == "youtube":
             # premiere 判定は yt-dlp のため時間がかかることがある。
             # その結果を、この POST のレスポンスで返す。
             gate: GateYoutube = request.app.state.gate_youtube
             access = await asyncio.to_thread(gate.execute, youtube_url)
-            if access == "premiere":
-                if video is None:
-                    raise HTTPException(status_code=400, detail="premiere_unavailable")
-            else:
+            if access != "premiere":
                 blocked = _BLOCKED_ACCESS.get(access)
                 if blocked is not None:
                     raise HTTPException(status_code=400, detail=blocked)
+
+        clips = None
+        needs_clips = source_kind == "file" or access == "premiere"
+        if needs_clips:
+            # 初回のプレミア POST は成果物なし。ダイアログでファイルを足して再送する。
+            if (
+                access == "premiere"
+                and intro_audio is None
+                and intro_frame is None
+                and routine_frame is None
+            ):
+                raise HTTPException(status_code=400, detail="premiere_unavailable")
+            clips = await read_review_clips(intro_audio, intro_frame, routine_frame)
 
         create: CreateReview = request.app.state.create_review
         run: RunReviews = request.app.state.run_reviews
         review = await asyncio.to_thread(
             create.execute, category, source_kind, youtube_url, raw_url
         )
-        background.add_task(run.execute, ReviewInput(review, video))
+        background.add_task(run.execute, ReviewInput(review, clips))
         response.headers["Location"] = f"/api/reviews/{review.id}"
         return present(ReviewView(review, []))
 

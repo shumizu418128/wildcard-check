@@ -584,7 +584,7 @@ test('a premiere URL asks for a video file before the review continues', async (
 			return
 		}
 		const text = route.request().postDataBuffer()?.toString('utf8') ?? ''
-		if (!text.includes('name="file"')) {
+		if (!text.includes('name="intro_audio"')) {
 			// 初回 POST（ファイルなし）: premiere 判定のあと追加提出を要求
 			await route.fulfill({
 				status: 400,
@@ -593,10 +593,12 @@ test('a premiere URL asks for a video file before the review continues', async (
 			})
 			return
 		}
-		// 追加提出: source は youtube のまま、youtube_url と file の両方
+		// 追加提出: source は youtube のまま。動画本体ではなく切り出した成果物を送る
 		expect(text).toMatch(/name="source"\r\n\r\nyoutube\r\n/)
 		expect(text).toContain('name="youtube_url"')
 		expect(text).toContain('abcdefghijk')
+		expect(text).toContain('name="intro_frame"')
+		expect(text).toContain('name="routine_frame"')
 		await route.fulfill({
 			status: 201,
 			contentType: 'application/json',

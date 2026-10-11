@@ -6,11 +6,13 @@ import requests
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from limits import parse
+from app.domain.clips import ReviewClips
 from app.domain.judge import Judge, is_yes
 from app.domain.review import Review
 from app.domain.youtube import YoutubeAccess
 from app.gateway.clef import data_url
 from app.gateway.yt_dlp_youtube import YtDlpYoutubeInspector
+from app.http.clips import MAX_AUDIO_BYTES
 from app.http.controller import register
 from app.http.origin import header, require_origin
 from app.http.rate_limit import limit_reviews
@@ -20,10 +22,9 @@ from app.usecase.get_review import GetReview
 from app.usecase.record_agreement import RecordAgreement
 from app.usecase.rules.catalog import build_rules
 from app.usecase.rules.gen_visibility import GenVisibility
-from app.usecase.rules.no_short import NoShort
-from app.usecase.rules.sub_raw import SubRaw
 from app.usecase.rules.intro_required import IntroRequired
 from app.usecase.rules.intro_same_take import IntroSameTake
+from app.usecase.rules.sub_raw import SubRaw
 from app.usecase.run_reviews import ReviewInput, RunReviews
 
 PLAYABLE_FORMAT = {"vcodec": "avc1", "acodec": "mp4a"}
@@ -55,11 +56,11 @@ class FakeMedia:
         self.frames: list[float] = []
         self.audios: list[float] = []
 
-    def frame(self, review: Review, video: bytes | None, seconds: float) -> bytes:
+    def frame(self, review: Review, seconds: float) -> bytes:
         self.frames.append(seconds)
         return f"frame-{seconds}".encode()
 
-    def audio(self, review: Review, video: bytes | None, seconds: float) -> bytes:
+    def audio(self, review: Review, seconds: float) -> bytes:
         self.audios.append(seconds)
         return b"audio"
 
@@ -68,9 +69,11 @@ class FakeTranscriber:
     def __init__(self, text: str) -> None:
         self.text = text
         self.languages: list[str] = []
+        self.audios: list[bytes] = []
 
     def transcribe(self, audio: bytes, language: str) -> str:
         self.languages.append(language)
+        self.audios.append(audio)
         return self.text
 
 
@@ -207,41 +210,6 @@ class GenVisibilityTests(unittest.TestCase):
             )
 
 
-class NoShortTests(unittest.TestCase):
-    def evaluate(self, url: str, final_url: str) -> tuple[bool, MagicMock]:
-        review = sample("solo", "youtube")
-        review.youtube_url = url
-        response = MagicMock()
-        response.url = final_url
-        with patch(
-            "app.usecase.rules.no_short.requests.get", return_value=response
-        ) as get:
-            ok = NoShort().evaluate(review, None, UnusedJudge())
-        return ok, get
-
-    def test_normal_video_redirects_to_watch(self):
-        ok, get = self.evaluate(
-            "https://www.youtube.com/watch?v=abcdefghijk",
-            "https://www.youtube.com/watch?v=abcdefghijk",
-        )
-        self.assertTrue(ok)
-        self.assertEqual(
-            get.call_args.args[0], "https://www.youtube.com/shorts/abcdefghijk"
-        )
-
-    def test_short_stays_on_shorts(self):
-        ok, _ = self.evaluate(
-            "https://youtu.be/abcdefghijk",
-            "https://www.youtube.com/shorts/abcdefghijk",
-        )
-        self.assertFalse(ok)
-
-    def test_non_video_url_fails(self):
-        ok, get = self.evaluate("https://example.com/", "")
-        self.assertFalse(ok)
-        get.assert_not_called()
-
-
 class SubRawTests(unittest.TestCase):
     def response(self, status: int, content_type: str = "text/html") -> MagicMock:
         response = MagicMock()
@@ -338,33 +306,50 @@ class IntroRequiredTests(unittest.TestCase):
         transcriber = FakeTranscriber("My name is Taro, and this is my solo wildcard.")
         judge = NoulJudge(0.9)
         rule = IntroRequired(media, transcriber)
-        self.assertTrue(rule.evaluate(sample("solo", "file"), b"v", judge))
+        self.assertTrue(rule.evaluate(sample("solo", "youtube"), None, judge))
         self.assertEqual(media.audios, [30])
         self.assertEqual(transcriber.languages, ["en"])
         self.assertIsNone(judge.calls[0][1])
 
+    def test_file_clips_skip_media(self):
+        media = FakeMedia()
+        transcriber = FakeTranscriber("My name is Taro, and this is my solo wildcard.")
+        clips = ReviewClips(b"RIFF\x00\x00\x00\x00WAVEaudio", b"\xff\xd8i", b"\xff\xd8r")
+        rule = IntroRequired(media, transcriber)
+        self.assertTrue(rule.evaluate(sample("solo", "file"), clips, NoulJudge(0.9)))
+        self.assertEqual(media.audios, [])
+        self.assertEqual(transcriber.audios, [clips.intro_audio])
+
     def test_no_greeting_fails(self):
         rule = IntroRequired(FakeMedia(), FakeTranscriber("beatbox"))
-        self.assertFalse(rule.evaluate(sample("solo", "file"), b"v", NoulJudge(0.1)))
+        self.assertFalse(rule.evaluate(sample("solo", "youtube"), None, NoulJudge(0.1)))
 
     def test_silent_intro_skips_judge(self):
         rule = IntroRequired(FakeMedia(), FakeTranscriber("  "))
-        self.assertFalse(rule.evaluate(sample("solo", "file"), b"v", UnusedJudge()))
+        self.assertFalse(rule.evaluate(sample("solo", "youtube"), None, UnusedJudge()))
 
 
 class FrameRuleTests(unittest.TestCase):
-    def test_same_take_sends_two_frames(self):
+    def test_same_take_extracts_youtube_frames(self):
         media = FakeMedia()
         judge = NoulJudge(0.8)
         self.assertTrue(
-            IntroSameTake(media).evaluate(sample("solo", "file"), b"v", judge)
+            IntroSameTake(media).evaluate(sample("solo", "youtube"), None, judge)
         )
         self.assertEqual(media.frames, [2, 60])
         self.assertEqual(judge.calls[0][1], [b"frame-2", b"frame-60"])
 
+    def test_same_take_uses_uploaded_frames(self):
+        media = FakeMedia()
+        judge = NoulJudge(0.8)
+        clips = ReviewClips(b"audio", b"intro", b"routine")
+        self.assertTrue(IntroSameTake(media).evaluate(sample("solo", "file"), clips, judge))
+        self.assertEqual(media.frames, [])
+        self.assertEqual(judge.calls[0][1], [b"intro", b"routine"])
+
     def test_same_take_fails_on_no(self):
         rule = IntroSameTake(FakeMedia())
-        self.assertFalse(rule.evaluate(sample("solo", "file"), b"v", NoulJudge(0.2)))
+        self.assertFalse(rule.evaluate(sample("solo", "youtube"), None, NoulJudge(0.2)))
 
     def test_threshold_is_inclusive(self):
         self.assertTrue(is_yes({"answers": {"a": {"type": "noul", "noul": 0.5}}}, "a"))
@@ -484,7 +469,7 @@ class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
                 return self.applies_to
 
             def evaluate(
-                self, _review: Review, _video: bytes | None, _judge: Judge
+                self, _review: Review, _clips: ReviewClips | None, _judge: Judge
             ) -> bool:
                 return self.ok
 
@@ -494,7 +479,10 @@ class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
             Answer("INTRO-SAME-TAKE", False),
             Answer("GEN-VISIBILITY", True),
         )
-        review_input = ReviewInput(sample("solo", "file"), b"keep")
+        review_input = ReviewInput(
+            sample("solo", "file"),
+            ReviewClips(b"keep", b"intro", b"routine"),
+        )
         await RunReviews(repository, judge, selected).execute(review_input)
         self.assertEqual(
             repository.saved,
@@ -505,9 +493,9 @@ class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
         self.assertEqual(repository.done, ["job"])
-        self.assertIsNone(review_input.video)
+        self.assertIsNone(review_input.clips)
 
-    async def test_debug_short_fixture_fails_no_short(self):
+    async def test_debug_fixture_passes_every_rule(self):
         repository = MemoryRepository()
 
         class Boom:
@@ -518,7 +506,7 @@ class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
                 return True
 
             def evaluate(
-                self, _review: Review, _video: bytes | None, _judge: Judge
+                self, _review: Review, _clips: ReviewClips | None, _judge: Judge
             ) -> bool:
                 raise AssertionError("evaluate")
 
@@ -530,8 +518,8 @@ class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
             "https://example.com/raw",
             "running",
         )
-        review_input = ReviewInput(review, None)
-        selected = (Boom("NO-SHORT"), Boom("INTRO-REQUIRED"))
+        review_input = ReviewInput(review)
+        selected = (Boom("SUB-RAW"), Boom("INTRO-REQUIRED"))
         with (
             patch.dict("os.environ", {"debug": "true"}),
             patch(
@@ -543,7 +531,7 @@ class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             repository.saved,
             [
-                ("job", "NO-SHORT", False),
+                ("job", "SUB-RAW", True),
                 ("job", "INTRO-REQUIRED", True),
             ],
         )
@@ -576,11 +564,23 @@ def build_api(secret: str = "") -> FastAPI:
     return app
 
 
+def wav_bytes() -> bytes:
+    return b"RIFF" + b"\x24\x00\x00\x00" + b"WAVE" + b"rest"
+
+
+def jpeg_bytes() -> bytes:
+    return b"\xff\xd8" + b"jpeg"
+
+
 def post_file(client: TestClient, source: str = "file"):
     return client.post(
         "/api/reviews",
         data={"category": "solo", "source": source},
-        files={"file": ("clip.mp4", b"video", "video/mp4")},
+        files={
+            "intro_audio": ("intro.wav", wav_bytes(), "audio/wav"),
+            "intro_frame": ("intro.jpg", jpeg_bytes(), "image/jpeg"),
+            "routine_frame": ("routine.jpg", jpeg_bytes(), "image/jpeg"),
+        },
     )
 
 
@@ -606,6 +606,81 @@ class OriginGuardTests(unittest.TestCase):
     def test_empty_secret_disables_guard(self):
         client = TestClient(build_api(""))
         self.assertEqual(client.get("/api/reviews/none").status_code, 404)
+
+
+class ClipUploadTests(unittest.TestCase):
+    def test_file_without_clips_is_rejected(self):
+        client = TestClient(build_api())
+        response = client.post(
+            "/api/reviews", data={"category": "solo", "source": "file"}
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "intro_audio")
+
+    def test_oversized_audio_is_rejected(self):
+        client = TestClient(build_api())
+        audio = b"RIFF" + (b"\x00" * 4) + b"WAVE" + (b"x" * MAX_AUDIO_BYTES)
+        response = client.post(
+            "/api/reviews",
+            data={"category": "solo", "source": "file"},
+            files={
+                "intro_audio": ("intro.wav", audio, "audio/wav"),
+                "intro_frame": ("intro.jpg", jpeg_bytes(), "image/jpeg"),
+                "routine_frame": ("routine.jpg", jpeg_bytes(), "image/jpeg"),
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "intro_audio")
+
+    def test_non_jpeg_frame_is_rejected(self):
+        client = TestClient(build_api())
+        response = client.post(
+            "/api/reviews",
+            data={"category": "solo", "source": "file"},
+            files={
+                "intro_audio": ("intro.wav", wav_bytes(), "audio/wav"),
+                "intro_frame": ("intro.jpg", b"not-jpeg", "image/jpeg"),
+                "routine_frame": ("routine.jpg", jpeg_bytes(), "image/jpeg"),
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "intro_frame")
+
+    def test_premiere_without_clips_asks_for_a_file(self):
+        app = build_api()
+        app.state.gate_youtube = GateYoutube(FixedInspector("premiere"))
+        client = TestClient(app)
+        response = client.post(
+            "/api/reviews",
+            data={
+                "category": "solo",
+                "source": "youtube",
+                "youtube_url": "https://youtu.be/abcdefghijk",
+                "raw_url": "https://example.com/raw",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "premiere_unavailable")
+
+    def test_file_post_keeps_clips(self):
+        app = build_api()
+
+        class CaptureRun:
+            def __init__(self) -> None:
+                self.seen: ReviewInput | None = None
+
+            def execute(self, data: ReviewInput) -> None:
+                self.seen = data
+
+        run = CaptureRun()
+        app.state.run_reviews = run
+        client = TestClient(app)
+        self.assertEqual(post_file(client).status_code, 201)
+        self.assertIsNotNone(run.seen)
+        assert run.seen is not None and run.seen.clips is not None
+        self.assertTrue(run.seen.clips.intro_audio.startswith(b"RIFF"))
+        self.assertTrue(run.seen.clips.intro_frame.startswith(b"\xff\xd8"))
+        self.assertTrue(run.seen.clips.routine_frame.startswith(b"\xff\xd8"))
 
 
 class RateLimitTests(unittest.TestCase):

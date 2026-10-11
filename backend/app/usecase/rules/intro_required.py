@@ -1,3 +1,4 @@
+from app.domain.clips import ReviewClips
 from app.domain.judge import Judge, is_yes, noul
 from app.domain.media import MediaSource
 from app.domain.review import Review
@@ -17,9 +18,12 @@ class IntroRequired:
     def applies(self, review: Review) -> bool:
         return True
 
-    def evaluate(self, review: Review, video: bytes | None, judge: Judge) -> bool:
+    def evaluate(self, review: Review, clips: ReviewClips | None, judge: Judge) -> bool:
         """冒頭 30 秒の文字起こしで、挨拶か自己紹介をしていれば True。"""
-        audio = self.media.audio(review, video, INTRO_SECONDS)
+        if clips is not None:
+            audio = clips.intro_audio
+        else:
+            audio = self.media.audio(review, INTRO_SECONDS)
         transcript = self.transcriber.transcribe(audio, LANGUAGE).strip()
         if transcript == "":
             return False

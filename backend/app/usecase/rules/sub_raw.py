@@ -4,6 +4,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
+from app.domain.clips import ReviewClips
 from app.domain.judge import Judge
 from app.domain.review import Review
 
@@ -47,7 +48,7 @@ class SubRaw:
     def applies(self, review: Review) -> bool:
         return review.source == "youtube" and review.raw_url.strip() != ""
 
-    def evaluate(self, review: Review, video: bytes | None, judge: Judge) -> bool:
+    def evaluate(self, review: Review, clips: ReviewClips | None, judge: Judge) -> bool:
         """死んでいるリンクとログイン着地だけ False。確認できないときは True。"""
         return not link_is_dead(review.raw_url)
 

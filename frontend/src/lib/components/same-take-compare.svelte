@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { introFrameSeconds, routineFrameSeconds } from '$lib/clip-times'
 	import { sheet } from '$lib/sheet'
+	import { blobToDataUrl, closeVideo, jpegFromVideo, openVideo, seekVideo } from '$lib/video-frame'
 
 	let { reviewId = '', videoUrl = '' }: { reviewId?: string; videoUrl?: string } = $props()
 
@@ -10,44 +12,13 @@
 		routine: '/placeholders/same-take-routine.svg',
 	}
 	// バックエンドの INTRO-SAME-TAKE と同じ秒数
-	const partSeconds: Record<Part, number> = { intro: 2, routine: 60 }
+	const partSeconds: Record<Part, number> = {
+		intro: introFrameSeconds,
+		routine: routineFrameSeconds,
+	}
 
 	let captured = $state<Partial<Record<Part, string>>>({})
 	let failed = $state<Partial<Record<Part, boolean>>>({})
-
-	const captureFrame = (url: string, seconds: number) =>
-		new Promise<string>((resolve, reject) => {
-			const video = document.createElement('video')
-			video.muted = true
-			video.preload = 'auto'
-			video.addEventListener(
-				'loadedmetadata',
-				() => {
-					video.currentTime = Math.min(seconds, Math.max(video.duration - 0.1, 0))
-				},
-				{ once: true },
-			)
-			video.addEventListener(
-				'seeked',
-				() => {
-					const canvas = document.createElement('canvas')
-					canvas.width = video.videoWidth
-					canvas.height = video.videoHeight
-					const context = canvas.getContext('2d')
-					if (!context) {
-						reject(new Error('canvas'))
-						return
-					}
-					context.drawImage(video, 0, 0)
-					resolve(canvas.toDataURL('image/jpeg', 0.8))
-					video.removeAttribute('src')
-					video.load()
-				},
-				{ once: true },
-			)
-			video.addEventListener('error', () => reject(new Error('video')), { once: true })
-			video.src = url
-		})
 
 	$effect(() => {
 		captured = {}
@@ -55,14 +26,24 @@
 		const url = videoUrl
 		if (reviewId !== '' || url === '') return
 		let active = true
+		let video: HTMLVideoElement | null = null
 		void (async () => {
-			for (const part of ['intro', 'routine'] as const) {
-				try {
-					const image = await captureFrame(url, partSeconds[part])
-					if (active) captured = { ...captured, [part]: image }
-				} catch {
-					if (active) failed = { ...failed, [part]: true }
+			try {
+				const opened = await openVideo(url)
+				video = opened
+				for (const part of ['intro', 'routine'] as const) {
+					try {
+						await seekVideo(opened, partSeconds[part])
+						const image = await blobToDataUrl(await jpegFromVideo(opened))
+						if (active) captured = { ...captured, [part]: image }
+					} catch {
+						if (active) failed = { ...failed, [part]: true }
+					}
 				}
+			} catch {
+				if (active) failed = { intro: true, routine: true }
+			} finally {
+				if (video) closeVideo(video)
 			}
 		})()
 		return () => {

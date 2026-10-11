@@ -105,6 +105,12 @@
 				<p class="mt-2 text-[14px] leading-6 text-muted">{sheet.premiereHint}</p>
 			</div>
 
+			{#if session.preparing}
+				<p class="mt-4 text-[16px] leading-6 text-muted" data-testid="preparing-clips">
+					{sheet.preparingClips}
+				</p>
+			{/if}
+
 			{#if session.error}
 				<p class="mt-4 text-[16px] leading-6 text-destructive" role="alert">{session.error}</p>
 			{/if}

@@ -1,3 +1,4 @@
+from app.domain.clips import ReviewClips
 from app.domain.judge import Judge, is_yes, noul
 from app.domain.media import MediaSource
 from app.domain.review import Review
@@ -15,12 +16,15 @@ class IntroSameTake:
     def applies(self, review: Review) -> bool:
         return True
 
-    def evaluate(self, review: Review, video: bytes | None, judge: Judge) -> bool:
+    def evaluate(self, review: Review, clips: ReviewClips | None, judge: Judge) -> bool:
         """0:02 と 1:00 のコマが同じ場所で撮られていれば True。"""
-        images = [
-            self.media.frame(review, video, INTRO_SECONDS),
-            self.media.frame(review, video, ROUTINE_SECONDS),
-        ]
+        if clips is not None:
+            images = [clips.intro_frame, clips.routine_frame]
+        else:
+            images = [
+                self.media.frame(review, INTRO_SECONDS),
+                self.media.frame(review, ROUTINE_SECONDS),
+            ]
         result = judge.decide(
             "Image 1 is the intro at 0:02 and image 2 is the routine at 1:00 "
             "of one beatbox video.",

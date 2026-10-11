@@ -65,8 +65,8 @@ def temp_path(suffix: str, data: bytes | None = None) -> Iterator[str]:
 
 
 class FfmpegMedia:
-    def frame(self, review: Review, video: bytes | None, seconds: float) -> bytes:
-        with self._input(review, video, FRAME_FORMAT) as (source, headers):
+    def frame(self, review: Review, seconds: float) -> bytes:
+        with self._input(review, FRAME_FORMAT) as (source, headers):
             image = run(
                 [
                     *headers,
@@ -89,9 +89,9 @@ class FfmpegMedia:
             raise RuntimeError("frame")
         return image
 
-    def audio(self, review: Review, video: bytes | None, seconds: float) -> bytes:
+    def audio(self, review: Review, seconds: float) -> bytes:
         with (
-            self._input(review, video, AUDIO_FORMAT) as (source, headers),
+            self._input(review, AUDIO_FORMAT) as (source, headers),
             temp_path(".wav") as output,
         ):
             # wav をパイプに書くとヘッダーのサイズが埋まらないので、ファイルに書く
@@ -115,13 +115,7 @@ class FfmpegMedia:
                 return file.read()
 
     @contextmanager
-    def _input(
-        self, review: Review, video: bytes | None, selector: str
-    ) -> Iterator[tuple[str, list[str]]]:
-        if video is not None:
-            with temp_path(".video", video) as path:
-                yield path, []
-            return
+    def _input(self, review: Review, selector: str) -> Iterator[tuple[str, list[str]]]:
         if review.youtube_url == "":
             raise RuntimeError("video")
         url, headers = stream(review.youtube_url, selector)
