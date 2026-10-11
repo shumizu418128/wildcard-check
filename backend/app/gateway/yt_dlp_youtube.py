@@ -1,3 +1,4 @@
+import time
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast
 
@@ -5,7 +6,7 @@ import yt_dlp
 from yt_dlp.utils import YoutubeDLError
 
 from app.domain.youtube import YoutubeAccess
-from app.gateway.debug import debug_fixture_access
+from app.gateway.debug import debug_fixture_access, debug_gate_delay
 
 if TYPE_CHECKING:
     from yt_dlp import _Params
@@ -15,6 +16,7 @@ class YtDlpYoutubeInspector:
     def inspect(self, url: str) -> YoutubeAccess:
         fixture = debug_fixture_access(url)
         if fixture is not None:
+            time.sleep(debug_gate_delay())
             return fixture
         # typeshed の skip_download は str なので、bool を渡すために cast する
         ydl_opts: _Params = {

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from app.domain.judge import Judge
 from app.domain.review import Review
 from app.domain.review_repository import ReviewRepository
-from app.gateway.debug import is_debug_short_fixture
+from app.gateway.debug import debug_rule_delay, is_debug_short_fixture
 from app.usecase.rule import Rule
 
 
@@ -48,6 +48,7 @@ class RunReviews:
         for rule in self.rules:
             if not rule.applies(review):
                 continue
+            await asyncio.sleep(debug_rule_delay())
             ok = rule.id != "NO-SHORT"
             await asyncio.to_thread(self.repository.save_result, review.id, rule.id, ok)
         await asyncio.to_thread(self.repository.mark_done, review.id)

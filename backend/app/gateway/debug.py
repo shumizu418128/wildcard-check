@@ -1,3 +1,5 @@
+import random
+
 from app.domain.youtube import YoutubeAccess, youtube_video_id
 from app.gateway.config import debug_enabled
 
@@ -12,6 +14,10 @@ _DEBUG_ACCESS: dict[str, YoutubeAccess] = {
     PRIVATE_VIDEO_ID: "private",
 }
 
+# 実際の処理時間を再現する待機秒数の範囲
+_GATE_DELAY = (1.0, 3.0)
+_RULE_DELAY = (0.5, 1.5)
+
 
 def debug_fixture_access(url: str) -> YoutubeAccess | None:
     """debug 時のみ、フィクスチャ URL の想定アクセスを返す。"""
@@ -23,3 +29,13 @@ def debug_fixture_access(url: str) -> YoutubeAccess | None:
 def is_debug_short_fixture(url: str) -> bool:
     """ゲートは通すが NO-SHORT を落とす Shorts フィクスチャか。"""
     return debug_enabled() and youtube_video_id(url) == SHORT_VIDEO_ID
+
+
+def debug_gate_delay() -> float:
+    """yt-dlp 判定の代わりに待つ秒数。"""
+    return random.uniform(*_GATE_DELAY)
+
+
+def debug_rule_delay() -> float:
+    """ルール 1 件の審査の代わりに待つ秒数。"""
+    return random.uniform(*_RULE_DELAY)
