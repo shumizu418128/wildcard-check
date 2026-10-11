@@ -366,9 +366,9 @@ export class ReviewSession {
 		if (this.advancing || this.jobDone || this.jobId === '') return
 		this.advancing = true
 		const watchId = this.watchId
-		this.error = ''
 		try {
-			await this.refreshReview()
+			const refreshed = await this.refreshReview()
+			if (watchId === this.watchId && refreshed) this.error = ''
 		} finally {
 			if (watchId === this.watchId) this.advancing = false
 		}

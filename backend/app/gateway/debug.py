@@ -26,6 +26,11 @@ def debug_fixture_access(url: str) -> YoutubeAccess | None:
     return _DEBUG_ACCESS.get(youtube_video_id(url))
 
 
+def is_debug_fixture(url: str) -> bool:
+    """debug 時のみ、審査でネットワークに出さないフィクスチャ URL か。"""
+    return debug_enabled() and youtube_video_id(url) in _DEBUG_ACCESS
+
+
 def is_debug_short_fixture(url: str) -> bool:
     """ゲートは通すが NO-SHORT を落とす Shorts フィクスチャか。"""
     return debug_enabled() and youtube_video_id(url) == SHORT_VIDEO_ID

@@ -4,6 +4,7 @@
 	import { categoryLabel, sheet } from '$lib/sheet'
 	import type { ReviewSession } from '$lib/session.svelte'
 	import BusyButton from '$lib/components/busy-button.svelte'
+	import PleaseWait from '$lib/components/please-wait.svelte'
 	import ReviewDetail from '$lib/components/review-detail.svelte'
 	import RuleLines from '$lib/components/rule-lines.svelte'
 	import SameTakeCompare from '$lib/components/same-take-compare.svelte'
@@ -127,18 +128,7 @@
 	{/snippet}
 	{@render stepFrame(current.title, body)}
 {:else if !session.jobDone}
-	<p class="mt-8 text-[24px] leading-8" data-testid="please-wait" aria-live="polite">
-		{sheet.pleaseWait}
-	</p>
-	<BusyButton
-		class="btn-primary mt-8 w-full sm:w-auto"
-		busy={session.advancing}
-		onclick={() => {
-			void session.pollReview()
-		}}
-	>
-		{sheet.next}
-	</BusyButton>
+	<PleaseWait {session} />
 {/if}
 
 {#if session.error}

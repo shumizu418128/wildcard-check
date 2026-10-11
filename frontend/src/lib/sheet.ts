@@ -43,6 +43,7 @@ export const sheet = {
 	close: 'Close',
 	next: 'Next',
 	pleaseWait: 'Please wait a moment.',
+	waitElapsed: 'Waiting',
 	fileBody: 'Post as a normal YouTube video, then review that URL here.',
 	filePost: 'Post it on YouTube',
 	fileResubmit: 'Submit the link here again',

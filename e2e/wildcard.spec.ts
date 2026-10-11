@@ -485,10 +485,39 @@ test('an unfinished review can ask you to wait partway through', async ({ page }
 	await expect(page.getByTestId('please-wait')).toBeVisible()
 	await expect(page.getByText('Please wait a moment.')).toBeVisible()
 	await expect(page.getByRole('button', { name: 'Still reviewing' })).toHaveCount(0)
-	await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeVisible()
+	await expect(page.getByRole('button', { name: 'Next', exact: true })).toHaveCount(0)
+	await expect(page.getByTestId('wait-elapsed')).toContainText('0:0')
+	await expect(page.getByTestId('wait-elapsed')).not.toContainText('0:00')
 	await expect(page.getByTestId('auto-error')).toHaveCount(0)
 	await expect(page).toHaveURL(/\/review\/job-wait$/)
 	await expect(page.getByTestId('outcome')).toHaveCount(0)
+})
+
+test('the wait screen moves on by itself when the review is ready', async ({ page }) => {
+	let ready = false
+	await page.route('**/api/reviews**', async (route) => {
+		const request = route.request()
+		if (request.url().endsWith('/agreements')) {
+			await route.fulfill({ status: 204 })
+			return
+		}
+		await route.fulfill({
+			status: request.method() === 'POST' ? 201 : 200,
+			contentType: 'application/json',
+			body: JSON.stringify(ready ? { ...doneReview, id: 'job-wait' } : runningReview),
+		})
+	})
+	await startYoutube(page)
+
+	for (let step = 0; step < 12; step += 1) {
+		if (await page.getByTestId('please-wait').isVisible()) break
+		await agreeAndLeave(page)
+	}
+	await expect(page.getByTestId('please-wait')).toBeVisible()
+
+	ready = true
+	await expect(page.getByTestId('please-wait')).toHaveCount(0, { timeout: 8000 })
+	await expect(page.getByRole('checkbox')).toBeVisible()
 })
 
 const fulfillResumable = async (page: Page) => {

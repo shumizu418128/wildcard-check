@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from app.domain.judge import Judge
 from app.domain.review import Review
 from app.domain.review_repository import ReviewRepository
-from app.gateway.debug import debug_rule_delay, is_debug_short_fixture
+from app.gateway.debug import (
+    debug_rule_delay,
+    is_debug_fixture,
+    is_debug_short_fixture,
+)
 from app.usecase.rule import Rule
 
 
@@ -25,10 +29,8 @@ class RunReviews:
     async def execute(self, review_input: ReviewInput) -> None:
         review = review_input.review
         try:
-            if review.source == "youtube" and is_debug_short_fixture(
-                review.youtube_url
-            ):
-                await self._save_debug_short(review)
+            if review.source == "youtube" and is_debug_fixture(review.youtube_url):
+                await self._save_debug_fixture(review)
                 return
             for rule in self.rules:
                 if not rule.applies(review):
@@ -43,12 +45,13 @@ class RunReviews:
         finally:
             review_input.video = None
 
-    async def _save_debug_short(self, review: Review) -> None:
-        """SHORT-VIDEO は NO-SHORT を失敗させ、Shorts ポップアップへ進める。"""
+    async def _save_debug_fixture(self, review: Review) -> None:
+        """フィクスチャは実動画がないため審査を模擬する。SHORT-VIDEO だけ NO-SHORT を失敗させる。"""
+        short = is_debug_short_fixture(review.youtube_url)
         for rule in self.rules:
             if not rule.applies(review):
                 continue
             await asyncio.sleep(debug_rule_delay())
-            ok = rule.id != "NO-SHORT"
+            ok = not (short and rule.id == "NO-SHORT")
             await asyncio.to_thread(self.repository.save_result, review.id, rule.id, ok)
         await asyncio.to_thread(self.repository.mark_done, review.id)
