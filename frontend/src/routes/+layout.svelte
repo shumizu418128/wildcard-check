@@ -28,14 +28,7 @@
 		if (!session.jobDone) return `${sheet.pleaseWait} — ${sheet.title}`
 		return sheet.title
 	})
-
-	const warnBeforeLeave = (event: BeforeUnloadEvent) => {
-		if (session.phase !== 'work') return
-		event.preventDefault()
-	}
 </script>
-
-<svelte:window onbeforeunload={warnBeforeLeave} />
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
