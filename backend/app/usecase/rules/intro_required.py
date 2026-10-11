@@ -10,12 +10,9 @@ LANGUAGE = "en"
 class IntroRequired:
     id = "INTRO-REQUIRED"
 
-    def __init__(
-        self, media: MediaSource, transcriber: Transcriber, jev: Judge
-    ) -> None:
+    def __init__(self, media: MediaSource, transcriber: Transcriber) -> None:
         self.media = media
         self.transcriber = transcriber
-        self.jev = jev
 
     def applies(self, review: Review) -> bool:
         return True
@@ -26,7 +23,7 @@ class IntroRequired:
         transcript = self.transcriber.transcribe(audio, LANGUAGE).strip()
         if transcript == "":
             return False
-        result = self.jev.decide(
+        result = judge.decide(
             {
                 "transcript": transcript,
                 "category": review.category,

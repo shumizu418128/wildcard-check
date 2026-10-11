@@ -6,7 +6,6 @@ from app.gateway.clef import ClefJudge
 from app.gateway.config import require_supabase
 from app.gateway.ffmpeg_media import FfmpegMedia
 from app.gateway.groq_whisper import GroqWhisper
-from app.gateway.jev import JevJudge
 from app.gateway.supabase_review_repository import SupabaseReviewRepository
 from app.gateway.yt_dlp_youtube import YtDlpYoutubeInspector
 from app.http.controller import register
@@ -25,7 +24,7 @@ async def lifespan(app: FastAPI):
     repository = SupabaseReviewRepository()
     inspector = YtDlpYoutubeInspector()
     media = FfmpegMedia()
-    rules = build_rules(inspector, media, GroqWhisper(), JevJudge())
+    rules = build_rules(inspector, media, GroqWhisper())
     app.state.create_review = CreateReview(repository)
     app.state.get_review = GetReview(repository, rules)
     app.state.get_same_take_frame = GetSameTakeFrame(repository, media)

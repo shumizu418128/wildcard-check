@@ -90,9 +90,7 @@ class NoulJudge:
 
 
 def default_rules():
-    return build_rules(
-        FixedInspector(), FakeMedia(), FakeTranscriber(""), UnusedJudge()
-    )
+    return build_rules(FixedInspector(), FakeMedia(), FakeTranscriber(""))
 
 
 def applicable_ids(category: str, source: str) -> list[str]:
@@ -332,19 +330,19 @@ class IntroRequiredTests(unittest.TestCase):
     def test_greeting_passes(self):
         media = FakeMedia()
         transcriber = FakeTranscriber("My name is Taro, and this is my solo wildcard.")
-        jev = NoulJudge(0.9)
-        rule = IntroRequired(media, transcriber, jev)
-        self.assertTrue(rule.evaluate(sample("solo", "file"), b"v", UnusedJudge()))
+        judge = NoulJudge(0.9)
+        rule = IntroRequired(media, transcriber)
+        self.assertTrue(rule.evaluate(sample("solo", "file"), b"v", judge))
         self.assertEqual(media.audios, [30])
         self.assertEqual(transcriber.languages, ["en"])
-        self.assertIsNone(jev.calls[0][1])
+        self.assertIsNone(judge.calls[0][1])
 
     def test_no_greeting_fails(self):
-        rule = IntroRequired(FakeMedia(), FakeTranscriber("beatbox"), NoulJudge(0.1))
-        self.assertFalse(rule.evaluate(sample("solo", "file"), b"v", UnusedJudge()))
+        rule = IntroRequired(FakeMedia(), FakeTranscriber("beatbox"))
+        self.assertFalse(rule.evaluate(sample("solo", "file"), b"v", NoulJudge(0.1)))
 
-    def test_silent_intro_skips_jev(self):
-        rule = IntroRequired(FakeMedia(), FakeTranscriber("  "), UnusedJudge())
+    def test_silent_intro_skips_judge(self):
+        rule = IntroRequired(FakeMedia(), FakeTranscriber("  "))
         self.assertFalse(rule.evaluate(sample("solo", "file"), b"v", UnusedJudge()))
 
 

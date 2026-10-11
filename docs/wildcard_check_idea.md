@@ -38,7 +38,7 @@ LOW
 ### INTRO-REQUIRED 冒頭の自己紹介
 - level: 1
 - risk: LOW
-- 実装: バックエンド `IntroRequired`（冒頭30秒 Whisper + Jev）。不合格時は警告表示、続行可
+- 実装: バックエンド `IntroRequired`（冒頭30秒 Whisper + Clef）。不合格時は警告表示、続行可
 - 対象セリフ例:
 
 My name is [ARTIST NAME], and this is my [CATEGORY] wildcard for the GBB2026 World League.

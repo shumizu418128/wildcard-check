@@ -1,6 +1,6 @@
 from typing import Protocol
 
-# Clef / Jev に既定の閾値はない。noul の確率がこれ以上なら yes とみなす
+# Clef に既定の閾値はない。noul の確率がこれ以上なら yes とみなす
 YES_THRESHOLD = 0.5
 
 

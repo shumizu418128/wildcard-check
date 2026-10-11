@@ -1,4 +1,3 @@
-from app.domain.judge import Judge
 from app.domain.media import MediaSource
 from app.domain.transcriber import Transcriber
 from app.domain.youtube import YoutubeInspector
@@ -14,12 +13,11 @@ def build_rules(
     inspector: YoutubeInspector,
     media: MediaSource,
     transcriber: Transcriber,
-    jev: Judge,
 ) -> tuple[Rule, ...]:
     return (
         NoShort(),
         SubRaw(),
         GenVisibility(inspector),
-        IntroRequired(media, transcriber, jev),
+        IntroRequired(media, transcriber),
         IntroSameTake(media),
     )
