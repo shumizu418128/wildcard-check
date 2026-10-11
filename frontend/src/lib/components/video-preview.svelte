@@ -9,15 +9,17 @@
 	let frame = $state<HTMLIFrameElement | null>(null)
 	let clip = $state<HTMLVideoElement | null>(null)
 
-	const useMockEmbed = () => session.source === 'youtube' && isDebugYoutubeUrl(session.youtubeUrl)
+	// プレミアの埋め込みはまだ再生できないので、追加提出のファイルがあればそちらを出す
+	const fileUrl = () => session.localVideoUrl
+
+	const useMockEmbed = () =>
+		fileUrl() === '' && session.source === 'youtube' && isDebugYoutubeUrl(session.youtubeUrl)
 
 	const embedUrl = () => {
-		if (session.source !== 'youtube' || useMockEmbed()) return ''
+		if (fileUrl() !== '' || session.source !== 'youtube' || useMockEmbed()) return ''
 		const origin = typeof window === 'undefined' ? '' : window.location.origin
 		return youtubeEmbedUrl(session.youtubeUrl, origin)
 	}
-
-	const fileUrl = () => (session.source === 'file' ? session.localVideoUrl : '')
 
 	const visible = () => {
 		if (useMockEmbed()) return watchesVideo(session.currentRuleId())

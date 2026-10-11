@@ -564,7 +564,8 @@ test('a premiere URL asks for a video file before the review continues', async (
 			})
 			return
 		}
-		// 追加提出: youtube_url と file の両方
+		// 追加提出: source は youtube のまま、youtube_url と file の両方
+		expect(text).toMatch(/name="source"\r\n\r\nyoutube\r\n/)
 		expect(text).toContain('name="youtube_url"')
 		expect(text).toContain('abcdefghijk')
 		await route.fulfill({
@@ -572,6 +573,7 @@ test('a premiere URL asks for a video file before the review continues', async (
 			contentType: 'application/json',
 			body: JSON.stringify({
 				id: 'job-premiere-file',
+				source: 'youtube',
 				status: 'done',
 				rules: [
 					{ id: 'INTRO-REQUIRED', status: 'clear' },
@@ -603,7 +605,7 @@ test('a premiere URL asks for a video file before the review continues', async (
 	await dialog.getByLabel('Video file').setInputFiles(fixture)
 	await dialog.getByRole('button', { name: 'Continue with this file' }).click()
 	await expect(dialog).toBeHidden()
-	await expect(page).toHaveURL(/\/review\/file$/)
+	await expect(page).toHaveURL(/\/review\/job-premiere-file$/)
 	await expect(page.getByRole('heading', { name: 'You only get one submission' })).toBeVisible()
 })
 

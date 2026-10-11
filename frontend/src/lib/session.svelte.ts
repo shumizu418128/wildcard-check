@@ -183,8 +183,7 @@ export class ReviewSession {
 				throw new Error('start')
 			}
 			this.premierePending = false
-			// プレミア追加提出後はファイル審査として進める
-			if (premiereFile) this.source = 'file'
+			if (premiereFile) this.source = 'youtube'
 			const payload = (await response.json()) as ReviewResource
 			this.takeRawUrl(payload)
 			this.jobId = payload.id

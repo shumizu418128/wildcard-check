@@ -28,7 +28,9 @@
 			headingEl?.focus()
 		})
 	})
-	const frameReviewId = () => (session.source === 'youtube' ? session.jobId : '')
+	// プレミアは yt-dlp でコマを取れないので、手元のファイルから切り出す
+	const frameReviewId = () =>
+		session.source === 'youtube' && session.localVideoUrl === '' ? session.jobId : ''
 	const agreeAndNext = () => {
 		if (session.advancing) return
 		session.agreed = true

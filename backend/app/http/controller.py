@@ -70,8 +70,6 @@ def register(app: FastAPI) -> None:
             if access == "premiere":
                 if video is None:
                     raise HTTPException(status_code=400, detail="premiere_unavailable")
-                # 追加提出されたファイルで審査を続行する
-                source_kind = "file"
             else:
                 blocked = _BLOCKED_ACCESS.get(access)
                 if blocked is not None:

@@ -68,7 +68,7 @@ export const sheet = {
 	premiereTitle: 'Upload the video file',
 	premiereNotice:
 		'This premiere is not available yet. Submit the same video file so the review can continue.',
-	premiereHint: 'The review continues with this file instead of the YouTube URL.',
+	premiereHint: 'This file is only used to check the video. Your submission stays the YouTube URL.',
 	premiereContinue: 'Continue with this file',
 	previewTitle: 'Submitted video',
 	endReview: 'End the review',
