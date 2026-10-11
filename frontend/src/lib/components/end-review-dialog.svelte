@@ -21,12 +21,12 @@
 	}
 
 	const abortRuleIds = {
-		shorts: 'GEN-YOUTUBE',
+		shorts: 'NO-SHORT',
 		visibility: 'GEN-VISIBILITY',
 		title: 'TITLE-FORMAT',
 	} as const
 	const abortRuleId = $derived(
-		session.abortKind === '' ? 'GEN-YOUTUBE' : abortRuleIds[session.abortKind],
+		session.abortKind === '' ? 'NO-SHORT' : abortRuleIds[session.abortKind],
 	)
 	const abortRule = $derived(ruleLinesFor(session.category, abortRuleId, session.source))
 </script>

@@ -21,5 +21,5 @@ def debug_fixture_access(url: str) -> YoutubeAccess | None:
 
 
 def is_debug_short_fixture(url: str) -> bool:
-    """ゲートは通すが GEN-YOUTUBE を落とす Shorts フィクスチャか。"""
+    """ゲートは通すが NO-SHORT を落とす Shorts フィクスチャか。"""
     return debug_enabled() and youtube_video_id(url) == SHORT_VIDEO_ID

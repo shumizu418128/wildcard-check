@@ -181,7 +181,7 @@ const expectNoBannedWords = async (page: Page, expectRawPledge = true) => {
 	for (const word of banned) {
 		expect(text, word).not.toContain(word)
 	}
-	for (const code of ['INTRO-SAME-TAKE', 'SYNC-LIVE', 'GEN-YOUTUBE', 'TITLE-FORMAT']) {
+	for (const code of ['INTRO-SAME-TAKE', 'SYNC-LIVE', 'NO-SHORT', 'TITLE-FORMAT']) {
 		expect(text, code).not.toContain(code)
 	}
 	expect(text).not.toContain('For reference')
@@ -312,7 +312,7 @@ const doneReview = {
 	id: 'job-fix',
 	status: 'done',
 	rules: [
-		{ id: 'GEN-YOUTUBE', status: 'clear' },
+		{ id: 'NO-SHORT', status: 'clear' },
 		{ id: 'INTRO-REQUIRED', status: 'clear' },
 		{ id: 'INTRO-SAME-TAKE', status: 'clear' },
 	],
@@ -383,7 +383,7 @@ test('a failed same-take review lists the result and the rule apart', async ({ p
 	await fulfillReview(page, sameTake)
 	await startYoutube(page)
 
-	let sawReview = false
+	const headings: string[] = []
 	const previewStarted = { value: false }
 	for (let step = 0; step < 20; step += 1) {
 		await expect
@@ -395,9 +395,10 @@ test('a failed same-take review lists the result and the rule apart', async ({ p
 			.not.toBe('')
 		if (await page.getByTestId('outcome').isVisible()) break
 		const heading = (await page.getByRole('heading').first().innerText()).trim()
+		headings.push(heading)
 		notePreviewOrder(heading, previewStarted)
 		await expectPreviewFor(page, heading)
-		if (heading === 'Intro in the same take' || heading === 'Record the intro in the same take') {
+		if (heading === 'Intro in the same take') {
 			const card = page.locator('article').filter({ has: page.getByRole('heading', { name: heading }) })
 			await expect(card.getByRole('heading', { name: 'Automatic review' })).toBeVisible()
 			await expect(card.getByRole('heading', { name: 'The rule', exact: true })).toBeVisible()
@@ -405,12 +406,12 @@ test('a failed same-take review lists the result and the rule apart', async ({ p
 			await expect(card.getByTestId('same-take-compare')).toBeVisible()
 			await expect(card.getByText('Intro and routine share place and take.')).toBeVisible()
 			await expect(card.getByText('A separately recorded intro.')).toBeVisible()
-			if (heading === 'Record the intro in the same take') sawReview = true
 		}
 		await agreeAndLeave(page)
 	}
 
-	expect(sawReview).toBe(true)
+	expect(headings.filter((heading) => heading === 'Intro in the same take')).toHaveLength(1)
+	expect(headings).not.toContain('Record the intro in the same take')
 	const automatic = page.locator('section').filter({
 		has: page.getByRole('heading', { name: 'Automatic review', exact: true }),
 	})
@@ -630,7 +631,7 @@ test('a Shorts result ends the review', async ({ page }) => {
 		...doneReview,
 		id: 'job-shorts',
 		rules: doneReview.rules.map((rule) =>
-			rule.id === 'GEN-YOUTUBE' ? { ...rule, status: 'fix' as const } : rule,
+			rule.id === 'NO-SHORT' ? { ...rule, status: 'fix' as const } : rule,
 		),
 	}
 	await fulfillReview(page, shortsReview)

@@ -216,7 +216,7 @@ const catalog: CatalogItem[] = [
 		notes: [],
 	},
 	{
-		id: 'GEN-YOUTUBE',
+		id: 'NO-SHORT',
 		title: 'Publish it as a normal video',
 		fix: {
 			lead: 'Shorts are not allowed. Use a normal video URL.',

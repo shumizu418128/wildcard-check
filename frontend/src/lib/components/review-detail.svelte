@@ -40,7 +40,7 @@
 			</div>
 		</div>
 	</div>
-	{#if id === 'GEN-YOUTUBE'}
+	{#if id === 'NO-SHORT'}
 		<FormatCompare />
 	{/if}
 	{#if id === 'GEN-VISIBILITY'}

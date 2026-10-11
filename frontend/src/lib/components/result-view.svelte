@@ -53,7 +53,7 @@
 		...session.rules.filter((rule) => rule.status === 'fix' && !watchesVideo(rule.id)),
 		...session.rules.filter((rule) => rule.status === 'fix' && watchesVideo(rule.id)),
 	]
-	const shorts = () => session.rules.some((rule) => rule.id === 'GEN-YOUTUBE' && rule.status === 'fix')
+	const shorts = () => session.rules.some((rule) => rule.id === 'NO-SHORT' && rule.status === 'fix')
 	const nonPublic = () =>
 		session.rules.some((rule) => rule.id === 'GEN-VISIBILITY' && rule.status === 'fix')
 	// /review と同じ順。冒頭の誓約、動画を見ない合格、視聴前の誓約、視聴後の項目。

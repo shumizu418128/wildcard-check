@@ -11,7 +11,7 @@ from app.usecase.get_review import GetReview
 from app.usecase.record_agreement import RecordAgreement
 from app.usecase.rules.catalog import build_rules
 from app.usecase.rules.gen_visibility import GenVisibility
-from app.usecase.rules.gen_youtube import GenYoutube
+from app.usecase.rules.no_short import NoShort
 from app.usecase.rules.intro_required import IntroRequired
 from app.usecase.rules.intro_same_take import IntroSameTake
 from app.usecase.run_reviews import ReviewInput, RunReviews
@@ -142,7 +142,7 @@ class ApplicableRuleTests(unittest.TestCase):
         self.assertEqual(
             applicable_ids("solo", "youtube"),
             [
-                "GEN-YOUTUBE",
+                "NO-SHORT",
                 "GEN-VISIBILITY",
                 "INTRO-REQUIRED",
                 "INTRO-SAME-TAKE",
@@ -198,16 +198,16 @@ class GenVisibilityTests(unittest.TestCase):
             )
 
 
-class GenYoutubeTests(unittest.TestCase):
+class NoShortTests(unittest.TestCase):
     def evaluate(self, url: str, final_url: str) -> tuple[bool, MagicMock]:
         review = sample("solo", "youtube")
         review.youtube_url = url
         response = MagicMock()
         response.url = final_url
         with patch(
-            "app.usecase.rules.gen_youtube.requests.get", return_value=response
+            "app.usecase.rules.no_short.requests.get", return_value=response
         ) as get:
-            ok = GenYoutube().evaluate(review, None, UnusedJudge())
+            ok = NoShort().evaluate(review, None, UnusedJudge())
         return ok, get
 
     def test_normal_video_redirects_to_watch(self):
@@ -385,7 +385,7 @@ class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
 
         selected = (
             Answer("INTRO-REQUIRED", True),
-            Answer("GEN-YOUTUBE", False, applies_to=False),
+            Answer("NO-SHORT", False, applies_to=False),
             Answer("INTRO-SAME-TAKE", False),
             Answer("GEN-VISIBILITY", True),
         )
@@ -402,7 +402,7 @@ class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repository.done, ["job"])
         self.assertIsNone(review_input.video)
 
-    async def test_debug_short_fixture_fails_gen_youtube(self):
+    async def test_debug_short_fixture_fails_no_short(self):
         repository = MemoryRepository()
 
         class Boom:
@@ -426,13 +426,13 @@ class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
             "running",
         )
         review_input = ReviewInput(review, None)
-        selected = (Boom("GEN-YOUTUBE"), Boom("INTRO-REQUIRED"))
+        selected = (Boom("NO-SHORT"), Boom("INTRO-REQUIRED"))
         with patch.dict("os.environ", {"debug": "true"}):
             await RunReviews(repository, UnusedJudge(), selected).execute(review_input)
         self.assertEqual(
             repository.saved,
             [
-                ("job", "GEN-YOUTUBE", False),
+                ("job", "NO-SHORT", False),
                 ("job", "INTRO-REQUIRED", True),
             ],
         )

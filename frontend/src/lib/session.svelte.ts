@@ -86,26 +86,23 @@ export class ReviewSession {
 		return this.pledgeList()[this.pledgeIndex]?.id ?? ''
 	}
 
-	// INTRO-SAME-TAKE などは自動判定の指摘と誓約の両方に出るため、指摘側は接頭辞で区別する
-	currentAgreementKey = () => {
-		const ruleId = this.currentRuleId()
-		if (ruleId === '') return ''
-		return this.autoCursor >= 0 ? `fix:${ruleId}` : ruleId
-	}
-
 	reviewPath = () => (this.source === 'youtube' ? `/review/${this.jobId}` : '/review/file')
 
 	finishPath = () => (this.source === 'youtube' ? `/finish/${this.jobId}` : '/finish/file')
 
+	// 自動判定で指摘したルールは指摘カードで同意済みなので、視聴後の誓約には出さない
+	reviewPledges = () => {
+		if (this.category === '') return []
+		return reviewPledgesFor(
+			this.category,
+			this.rules.filter((rule) => rule.status !== 'fix').map((rule) => rule.id),
+			this.source,
+		)
+	}
+
 	pledgeList = () => {
 		if (this.category === '') return []
-		if (this.pledgeStep === 'review') {
-			return reviewPledgesFor(
-				this.category,
-				this.rules.map((rule) => rule.id),
-				this.source,
-			)
-		}
+		if (this.pledgeStep === 'review') return this.reviewPledges()
 		if (this.pledgeStep === 'watch') return watchPledgesFor(this.category, this.source)
 		return plainPledgesFor(this.category, this.source)
 	}
@@ -220,7 +217,7 @@ export class ReviewSession {
 	autoFixes = () =>
 		this.rules.filter(
 			(rule) =>
-				rule.id !== 'GEN-YOUTUBE' &&
+				rule.id !== 'NO-SHORT' &&
 				rule.id !== 'GEN-VISIBILITY' &&
 				rule.status === 'fix',
 		)
@@ -242,7 +239,7 @@ export class ReviewSession {
 	}
 
 	haltForShorts = () => {
-		const shorts = this.rules.some((rule) => rule.id === 'GEN-YOUTUBE' && rule.status === 'fix')
+		const shorts = this.rules.some((rule) => rule.id === 'NO-SHORT' && rule.status === 'fix')
 		if (!shorts) return false
 		this.abortReview(sheet.shortsUrlError, 'shorts')
 		return true
@@ -314,7 +311,7 @@ export class ReviewSession {
 		const limit = agreed.size + 1
 		for (let step = 0; step < limit; step += 1) {
 			if (this.phase !== 'work' || this.abortMessage !== '') break
-			const key = this.currentAgreementKey()
+			const key = this.currentRuleId()
 			if (key === '' || !agreed.has(key)) break
 			this.advanceAfterAgreement()
 		}
@@ -352,7 +349,7 @@ export class ReviewSession {
 		if (this.abortMessage !== '' || !this.agreed || !this.category || this.advancing) return
 		this.advancing = true
 		const watchId = this.watchId
-		const key = this.currentAgreementKey()
+		const key = this.currentRuleId()
 		this.agreed = false
 		this.error = ''
 		try {
@@ -447,12 +444,7 @@ export class ReviewSession {
 
 	enterReviewOrResult = () => {
 		if (!this.category) return
-		const review = reviewPledgesFor(
-			this.category,
-			this.rules.map((rule) => rule.id),
-			this.source,
-		)
-		if (review.length === 0) {
+		if (this.reviewPledges().length === 0) {
 			this.enterResult()
 			return
 		}

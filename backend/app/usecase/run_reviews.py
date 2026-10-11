@@ -44,10 +44,10 @@ class RunReviews:
             review_input.video = None
 
     async def _save_debug_short(self, review: Review) -> None:
-        """SHORT-VIDEO は GEN-YOUTUBE を失敗させ、Shorts ポップアップへ進める。"""
+        """SHORT-VIDEO は NO-SHORT を失敗させ、Shorts ポップアップへ進める。"""
         for rule in self.rules:
             if not rule.applies(review):
                 continue
-            ok = rule.id != "GEN-YOUTUBE"
+            ok = rule.id != "NO-SHORT"
             await asyncio.to_thread(self.repository.save_result, review.id, rule.id, ok)
         await asyncio.to_thread(self.repository.mark_done, review.id)

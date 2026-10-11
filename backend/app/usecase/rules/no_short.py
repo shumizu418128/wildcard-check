@@ -7,8 +7,8 @@ from app.domain.review import Review
 from app.domain.youtube import youtube_video_id
 
 
-class GenYoutube:
-    id = "GEN-YOUTUBE"
+class NoShort:
+    id = "NO-SHORT"
 
     def applies(self, review: Review) -> bool:
         return review.source == "youtube"
