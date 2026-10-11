@@ -88,6 +88,12 @@ export class ReviewSession {
 		return this.pledgeList()[this.pledgeIndex]?.id ?? ''
 	}
 
+	// 表示中の誓約も指摘もなく、判定が終わるまで Please wait を出している
+	isWaiting = () => {
+		if (this.jobDone || this.autoCursor >= 0) return false
+		return this.pledgeList()[this.pledgeIndex] === undefined
+	}
+
 	reviewPath = () => (this.source === 'youtube' ? `/review/${this.jobId}` : '/review/file')
 
 	finishPath = () => (this.source === 'youtube' ? `/finish/${this.jobId}` : '/finish/file')

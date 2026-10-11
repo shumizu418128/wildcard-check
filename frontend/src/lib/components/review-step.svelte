@@ -127,7 +127,7 @@
 		{/if}
 	{/snippet}
 	{@render stepFrame(current.title, body)}
-{:else if !session.jobDone}
+{:else if session.isWaiting()}
 	<PleaseWait {session} />
 {/if}
 

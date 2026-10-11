@@ -15,6 +15,8 @@
 </script>
 
 {#if session.phase === 'work' && session.abortMessage === ''}
-	<VideoPreview {session} />
+	{#if !session.isWaiting()}
+		<VideoPreview {session} />
+	{/if}
 	<ReviewStep {session} />
 {/if}

@@ -5,7 +5,8 @@
 	import type { ReviewSession } from '$lib/session.svelte'
 	import { youtubeEmbedUrl } from '$lib/youtube'
 
-	let { session }: { session: ReviewSession } = $props()
+	let { session, showSubmitted = false }: { session: ReviewSession; showSubmitted?: boolean } =
+		$props()
 	let frame = $state<HTMLIFrameElement | null>(null)
 	let clip = $state<HTMLVideoElement | null>(null)
 
@@ -21,9 +22,12 @@
 		return youtubeEmbedUrl(session.youtubeUrl, origin)
 	}
 
+	const hasSubmittedVideo = () => fileUrl() !== '' || useMockEmbed() || embedUrl() !== ''
+
 	const visible = () => {
-		if (useMockEmbed()) return watchesVideo(session.currentRuleId())
-		if (embedUrl() === '' && fileUrl() === '') return false
+		if (!hasSubmittedVideo()) return false
+		// 待機画面では、今のルールが動画を見るかどうかに関係なく提出動画を出す
+		if (showSubmitted) return true
 		return watchesVideo(session.currentRuleId())
 	}
 

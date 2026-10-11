@@ -108,8 +108,19 @@
 		border-radius: 8px;
 		animation: btn-spin 0.8s linear infinite;
 	}
+	.wait-spinner {
+		box-sizing: border-box;
+		width: 24px;
+		height: 24px;
+		flex: none;
+		border: 2px solid currentColor;
+		border-right-color: transparent;
+		border-radius: 16px;
+		animation: btn-spin 0.8s linear infinite;
+	}
 	@media (prefers-reduced-motion: reduce) {
-		.btn-spinner {
+		.btn-spinner,
+		.wait-spinner {
 			animation: none;
 			border-right-color: currentColor;
 			opacity: 0.64;

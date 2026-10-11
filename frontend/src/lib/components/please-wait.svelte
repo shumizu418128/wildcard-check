@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { sheet } from '$lib/sheet'
 	import type { ReviewSession } from '$lib/session.svelte'
+	import VideoPreview from '$lib/components/video-preview.svelte'
 
 	let { session }: { session: ReviewSession } = $props()
 
@@ -28,10 +29,14 @@
 	})
 </script>
 
-<div class="mt-8" data-testid="please-wait">
-	<p class="text-[24px] leading-8" aria-live="polite">{sheet.pleaseWait}</p>
+<div class="mt-8" data-testid="please-wait" aria-busy="true">
+	<div class="flex items-center gap-4 text-ink">
+		<span class="wait-spinner" data-testid="wait-spinner" aria-hidden="true"></span>
+		<p class="text-[24px] leading-8" aria-live="polite">{sheet.pleaseWait}</p>
+	</div>
 	<p class="mt-2 text-[16px] leading-6 text-muted tabular-nums" data-testid="wait-elapsed">
 		{sheet.waitElapsed}
 		<span class="font-semibold text-ink">{elapsedLabel()}</span>
 	</p>
+	<VideoPreview {session} showSubmitted />
 </div>

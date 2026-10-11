@@ -484,6 +484,13 @@ test('an unfinished review can ask you to wait partway through', async ({ page }
 
 	await expect(page.getByTestId('please-wait')).toBeVisible()
 	await expect(page.getByText('Please wait a moment.')).toBeVisible()
+	await expect(page.getByTestId('wait-spinner')).toBeVisible()
+	const waitingPreview = page.getByTestId('please-wait').getByTestId('video-preview')
+	await expect(waitingPreview).toBeVisible()
+	await expect(waitingPreview.getByTitle('Submitted video')).toHaveAttribute(
+		'src',
+		/https:\/\/www\.youtube-nocookie\.com\/embed\/abcdefghijk\?/,
+	)
 	await expect(page.getByRole('button', { name: 'Still reviewing' })).toHaveCount(0)
 	await expect(page.getByRole('button', { name: 'Next', exact: true })).toHaveCount(0)
 	await expect(page.getByTestId('wait-elapsed')).toContainText('0:0')
@@ -514,6 +521,8 @@ test('the wait screen moves on by itself when the review is ready', async ({ pag
 		await agreeAndLeave(page)
 	}
 	await expect(page.getByTestId('please-wait')).toBeVisible()
+	await expect(page.getByTestId('wait-spinner')).toBeVisible()
+	await expect(page.getByTestId('please-wait').getByTestId('video-preview')).toBeVisible()
 
 	ready = true
 	await expect(page.getByTestId('please-wait')).toHaveCount(0, { timeout: 8000 })
