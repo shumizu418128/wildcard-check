@@ -90,6 +90,7 @@
 				notes={detail.notes}
 				reviewId={frameReviewId()}
 				videoUrl={session.localVideoUrl}
+				rawUrl={session.rawUrl}
 			/>
 		{/snippet}
 		{@render stepFrame(rules[rule.id]?.title ?? '', body, 'auto-error')}

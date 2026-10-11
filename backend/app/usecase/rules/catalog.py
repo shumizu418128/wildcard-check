@@ -7,6 +7,7 @@ from app.usecase.rules.gen_visibility import GenVisibility
 from app.usecase.rules.intro_required import IntroRequired
 from app.usecase.rules.intro_same_take import IntroSameTake
 from app.usecase.rules.no_short import NoShort
+from app.usecase.rules.sub_raw import SubRaw
 
 
 def build_rules(
@@ -17,6 +18,7 @@ def build_rules(
 ) -> tuple[Rule, ...]:
     return (
         NoShort(),
+        SubRaw(),
         GenVisibility(inspector),
         IntroRequired(media, transcriber, jev),
         IntroSameTake(media),

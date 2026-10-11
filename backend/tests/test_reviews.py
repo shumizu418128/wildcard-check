@@ -1,5 +1,8 @@
+import socket
 import unittest
 from unittest.mock import MagicMock, patch
+
+import requests
 
 from app.domain.judge import Judge, is_yes
 from app.domain.review import Review
@@ -12,6 +15,7 @@ from app.usecase.record_agreement import RecordAgreement
 from app.usecase.rules.catalog import build_rules
 from app.usecase.rules.gen_visibility import GenVisibility
 from app.usecase.rules.no_short import NoShort
+from app.usecase.rules.sub_raw import SubRaw
 from app.usecase.rules.intro_required import IntroRequired
 from app.usecase.rules.intro_same_take import IntroSameTake
 from app.usecase.run_reviews import ReviewInput, RunReviews
@@ -143,6 +147,7 @@ class ApplicableRuleTests(unittest.TestCase):
             applicable_ids("solo", "youtube"),
             [
                 "NO-SHORT",
+                "SUB-RAW",
                 "GEN-VISIBILITY",
                 "INTRO-REQUIRED",
                 "INTRO-SAME-TAKE",
@@ -231,6 +236,96 @@ class NoShortTests(unittest.TestCase):
         ok, get = self.evaluate("https://example.com/", "")
         self.assertFalse(ok)
         get.assert_not_called()
+
+
+class SubRawTests(unittest.TestCase):
+    def response(self, status: int, content_type: str = "text/html") -> MagicMock:
+        response = MagicMock()
+        response.status_code = status
+        response.headers = {"Content-Type": content_type}
+        response.iter_content.return_value = iter(())
+        return response
+
+    def evaluate(self, response: MagicMock) -> bool:
+        review = sample("solo", "youtube")
+        with (
+            patch("app.usecase.rules.sub_raw._is_safe_url", return_value=True),
+            patch("app.usecase.rules.sub_raw.requests.get", side_effect=[response]),
+        ):
+            return SubRaw().evaluate(review, None, UnusedJudge())
+
+    def test_missing_link_fails(self):
+        missing = self.response(404)
+        self.assertFalse(self.evaluate(missing))
+        missing.iter_content.assert_not_called()
+
+    def test_gone_and_unauthorized_fail(self):
+        self.assertFalse(self.evaluate(self.response(401)))
+        self.assertFalse(self.evaluate(self.response(410)))
+
+    def test_forbidden_and_server_error_pass(self):
+        blocked = self.response(403)
+        blocked.iter_content.return_value = iter([b"You need access"])
+        self.assertTrue(self.evaluate(blocked))
+        blocked.iter_content.assert_not_called()
+        self.assertTrue(self.evaluate(self.response(500)))
+
+    def test_timeout_passes(self):
+        review = sample("solo", "youtube")
+        with (
+            patch("app.usecase.rules.sub_raw._is_safe_url", return_value=True),
+            patch(
+                "app.usecase.rules.sub_raw.requests.get",
+                side_effect=requests.Timeout("slow"),
+            ),
+        ):
+            ok = SubRaw().evaluate(review, None, UnusedJudge())
+        self.assertTrue(ok)
+
+    def test_login_host_fails_without_a_second_request(self):
+        review = sample("solo", "youtube")
+        redirected = self.response(302)
+        redirected.headers["Location"] = "https://accounts.google.com/ServiceLogin"
+        with (
+            patch("app.usecase.rules.sub_raw._is_safe_url", return_value=True),
+            patch(
+                "app.usecase.rules.sub_raw.requests.get", return_value=redirected
+            ) as get,
+        ):
+            ok = SubRaw().evaluate(review, None, UnusedJudge())
+        self.assertFalse(ok)
+        self.assertEqual(get.call_count, 1)
+
+    def test_access_wall_fails_and_sign_in_chrome_passes(self):
+        wall = self.response(200)
+        wall.iter_content.return_value = iter([b"<html>You need access</html>"])
+        self.assertFalse(self.evaluate(wall))
+        chrome = self.response(200)
+        chrome.iter_content.return_value = iter([b"<a>Sign in</a>"])
+        self.assertTrue(self.evaluate(chrome))
+
+    def test_file_response_is_not_read(self):
+        media = self.response(200, "audio/wav")
+        self.assertTrue(self.evaluate(media))
+        media.iter_content.assert_not_called()
+
+    def test_private_address_is_not_requested(self):
+        review = sample("solo", "youtube")
+        dns = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443)),
+        ]
+        with (
+            patch("app.usecase.rules.sub_raw.socket.getaddrinfo", return_value=dns),
+            patch("app.usecase.rules.sub_raw.requests.get") as get,
+        ):
+            ok = SubRaw().evaluate(review, None, UnusedJudge())
+        self.assertTrue(ok)
+        get.assert_not_called()
+
+    def test_blank_raw_url_does_not_apply(self):
+        review = sample("solo", "youtube")
+        review.raw_url = "  "
+        self.assertFalse(SubRaw().applies(review))
 
 
 class IntroRequiredTests(unittest.TestCase):
@@ -330,7 +425,12 @@ class YtDlpYoutubeInspectorTests(unittest.TestCase):
 
     def test_debug_fixture_urls(self):
         inspector = YtDlpYoutubeInspector()
-        with patch.dict("os.environ", {"debug": "true"}):
+        with (
+            patch.dict("os.environ", {"debug": "true"}),
+            patch(
+                "app.gateway.yt_dlp_youtube.debug_gate_delay", return_value=0
+            ) as delay,
+        ):
             self.assertEqual(
                 inspector.inspect("https://www.youtube.com/watch?v=SHORT-VIDEO"),
                 "public",
@@ -343,6 +443,7 @@ class YtDlpYoutubeInspectorTests(unittest.TestCase):
                 inspector.inspect("https://www.youtube.com/watch?v=PRIVATE-VID"),
                 "private",
             )
+        self.assertEqual(delay.call_count, 3)
 
     def test_debug_fixture_off_calls_yt_dlp(self):
         inspector = YtDlpYoutubeInspector()
@@ -427,8 +528,14 @@ class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
         )
         review_input = ReviewInput(review, None)
         selected = (Boom("NO-SHORT"), Boom("INTRO-REQUIRED"))
-        with patch.dict("os.environ", {"debug": "true"}):
+        with (
+            patch.dict("os.environ", {"debug": "true"}),
+            patch(
+                "app.usecase.run_reviews.debug_rule_delay", return_value=0
+            ) as delay,
+        ):
             await RunReviews(repository, UnusedJudge(), selected).execute(review_input)
+        self.assertEqual(delay.call_count, 2)
         self.assertEqual(
             repository.saved,
             [

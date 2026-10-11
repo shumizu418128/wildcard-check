@@ -95,6 +95,10 @@ const catalog: CatalogItem[] = [
 		title: 'Add your raw files with a public link',
 		sources: ['youtube'],
 		pledge: true,
+		fix: {
+			lead: "This link didn't open. Use a public link that doesn't ask for access.",
+			samples: [],
+		},
 		lines: [
 			yes('Raw audio on a public link.'),
 			yes('Raw video with camera audio on a public link.'),

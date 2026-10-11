@@ -14,6 +14,7 @@
 		videoTitle = '',
 		reviewId = '',
 		videoUrl = '',
+		rawUrl = '',
 	}: {
 		id: string
 		lines: Verdict[]
@@ -21,7 +22,12 @@
 		videoTitle?: string
 		reviewId?: string
 		videoUrl?: string
+		rawUrl?: string
 	} = $props()
+
+	const foundSomething = $derived(
+		(id === 'TITLE-FORMAT' && videoTitle !== '') || (id === 'SUB-RAW' && rawUrl !== ''),
+	)
 </script>
 
 <div class="mt-6">
@@ -31,7 +37,13 @@
 			{videoTitle}
 		</p>
 	{/if}
-	<h2 class="eyebrow {id === 'TITLE-FORMAT' && videoTitle !== '' ? 'mt-8' : ''}">{sheet.autoHeading}</h2>
+	{#if id === 'SUB-RAW' && rawUrl !== ''}
+		<p class="text-[16px] leading-6 text-muted">{sheet.foundRaw}</p>
+		<p class="mt-2 text-[24px] leading-8 font-semibold break-all" data-testid="found-raw">
+			{rawUrl}
+		</p>
+	{/if}
+	<h2 class="eyebrow {foundSomething ? 'mt-8' : ''}">{sheet.autoHeading}</h2>
 	<div class="mt-2 rounded-lg bg-[#fff1f0] p-4 text-destructive">
 		<div class="flex items-start gap-2">
 			<p class="w-8 shrink-0 text-[16px] leading-6">×</p>

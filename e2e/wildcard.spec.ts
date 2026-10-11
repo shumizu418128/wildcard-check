@@ -35,12 +35,15 @@ const previewOn = [
 
 const previewOff = [
 	'You only get one submission',
-	'Add your raw files with a public link',
 	'Age restriction',
 	'Video call if you win',
 	'Video title',
 	'Publish it as a normal video',
 ]
+
+// A passed raw-link check is confirmed after the video. Hide the preview there too.
+const hidesPreview = (heading: string) =>
+	previewOff.includes(heading) || heading === 'Add your raw files with a public link'
 
 const expectCloseAtTopRight = async (dialog: Locator) => {
 	const close = dialog.getByRole('button', { name: 'Close' })
@@ -61,7 +64,7 @@ const expectCloseAtTopRight = async (dialog: Locator) => {
 const expectPreviewFor = async (page: Page, heading: string) => {
 	const preview = page.getByTestId('video-preview')
 	if (previewOn.includes(heading)) await expect(preview).toBeVisible()
-	if (previewOff.includes(heading)) await expect(preview).toBeHidden()
+	if (hidesPreview(heading)) await expect(preview).toBeHidden()
 }
 
 const notePreviewOrder = (heading: string, started: { value: boolean }) => {
@@ -313,6 +316,7 @@ const doneReview = {
 	status: 'done',
 	rules: [
 		{ id: 'NO-SHORT', status: 'clear' },
+		{ id: 'SUB-RAW', status: 'clear' },
 		{ id: 'INTRO-REQUIRED', status: 'clear' },
 		{ id: 'INTRO-SAME-TAKE', status: 'clear' },
 	],
