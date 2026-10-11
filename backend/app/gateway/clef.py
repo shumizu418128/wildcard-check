@@ -6,7 +6,7 @@ import httpx
 account_env = "CLOUDFLARE_ACCOUNT_ID"
 token_env = "CLOUDFLARE_API_TOKEN"
 model_env = "CLEF_MODEL"
-default_model = "clef"
+default_model = "clef-flash"
 
 
 def data_url(image: bytes) -> str:
@@ -40,7 +40,7 @@ class ClefJudge:
             if len(images) > 4:
                 raise ValueError("images")
             body["images"] = [data_url(image) for image in images]
-        url = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/clef"
+        url = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/{model}"
         response = httpx.post(
             url,
             headers={"Authorization": f"Bearer {token}"},
