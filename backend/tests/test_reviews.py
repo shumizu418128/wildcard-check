@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import requests
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from limits import parse
 from app.domain.judge import Judge, is_yes
 from app.domain.review import Review
 from app.domain.youtube import YoutubeAccess
@@ -12,6 +13,7 @@ from app.gateway.clef import data_url
 from app.gateway.yt_dlp_youtube import YtDlpYoutubeInspector
 from app.http.controller import register
 from app.http.origin import header, require_origin
+from app.http.rate_limit import limit_reviews
 from app.usecase.create_review import CreateReview
 from app.usecase.gate_youtube import GateYoutube
 from app.usecase.get_review import GetReview
@@ -565,6 +567,7 @@ class NoopRun:
 
 def build_api(secret: str = "") -> FastAPI:
     app = FastAPI()
+    limit_reviews(app, parse("1 per 10 seconds"))
     register(app, require_origin(secret))
     repository = MemoryRepository()
     app.state.create_review = CreateReview(repository)
@@ -603,6 +606,33 @@ class OriginGuardTests(unittest.TestCase):
     def test_empty_secret_disables_guard(self):
         client = TestClient(build_api(""))
         self.assertEqual(client.get("/api/reviews/none").status_code, 404)
+
+
+class RateLimitTests(unittest.TestCase):
+    def test_second_review_within_window_is_rejected(self):
+        client = TestClient(build_api())
+        self.assertEqual(post_file(client).status_code, 201)
+        response = post_file(client)
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.json(), {"detail": "rate_limited"})
+        self.assertIn("retry-after", response.headers)
+
+    def test_failed_review_is_not_counted(self):
+        client = TestClient(build_api())
+        self.assertEqual(post_file(client, source="bad").status_code, 400)
+        self.assertEqual(post_file(client).status_code, 201)
+
+    def test_other_ip_is_counted_separately(self):
+        app = build_api()
+        first = TestClient(app, client=("192.0.2.1", 50000))
+        second = TestClient(app, client=("192.0.2.2", 50000))
+        self.assertEqual(post_file(first).status_code, 201)
+        self.assertEqual(post_file(second).status_code, 201)
+
+    def test_polling_is_not_limited(self):
+        client = TestClient(build_api())
+        for _ in range(3):
+            self.assertEqual(client.get("/api/reviews/none").status_code, 404)
 
 
 if __name__ == "__main__":

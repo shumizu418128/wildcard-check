@@ -62,6 +62,7 @@ export const sheet = {
 	pledgeNoted: 'Agreed',
 	pledgeOpen: 'Not yet',
 	startError: "Couldn't start the review. Fix your input and try again.",
+	rateLimitError: 'Too many reviews in a row. Wait 10 seconds and try again.',
 	streamError: 'The review was interrupted. Start again.',
 	shortsUrlError: 'Shorts are not allowed. Use a normal video URL.',
 	titleUrlError: "This title doesn't match. Use one of these.",

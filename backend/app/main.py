@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from limits import parse
 from app.gateway.clef import ClefJudge
 from app.gateway.config import origin_secret, require_supabase
 from app.gateway.ffmpeg_media import FfmpegMedia
@@ -9,6 +10,7 @@ from app.gateway.supabase_review_repository import SupabaseReviewRepository
 from app.gateway.yt_dlp_youtube import YtDlpYoutubeInspector
 from app.http.controller import register
 from app.http.origin import require_origin
+from app.http.rate_limit import limit_reviews
 from app.usecase.create_review import CreateReview
 from app.usecase.gate_youtube import GateYoutube
 from app.usecase.get_review import GetReview
@@ -45,4 +47,5 @@ app = FastAPI(
     redoc_url="/redoc" if docs else None,
     openapi_url="/openapi.json" if docs else None,
 )
+limit_reviews(app, parse("1 per 10 seconds"))
 register(app, require_origin(secret))

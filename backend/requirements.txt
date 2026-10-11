@@ -3,6 +3,7 @@ uvicorn
 python-multipart
 supabase
 httpx
+limits
 requests
 yt_dlp
 imageio-ffmpeg

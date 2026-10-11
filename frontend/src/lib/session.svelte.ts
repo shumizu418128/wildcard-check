@@ -166,6 +166,11 @@ export class ReviewSession {
 			if (file) this.localVideoUrl = URL.createObjectURL(file)
 			this.stopWatch()
 			const response = await fetch('/api/reviews', { method: 'POST', body })
+			if (response.status === 429) {
+				this.releaseLocalVideo()
+				this.error = sheet.rateLimitError
+				return
+			}
 			if (!response.ok) {
 				const detail = await readErrorDetail(response)
 				if (detail === shortsUrlCode) {
