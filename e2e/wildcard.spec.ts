@@ -279,9 +279,11 @@ test('YouTube continues to the Swissbeatbox submission page', async ({ page }) =
 	await expect(
 		dialog.getByText('Only the first video counts. You lose your Wildcard.'),
 	).toBeVisible()
+	const reviewId = page.url().match(/\/finish\/([^/?#]+)/)?.[1]
+	expect(reviewId).toBeTruthy()
 	await expect(dialog.getByRole('link', { name: 'Continue' })).toHaveAttribute(
 		'href',
-		'https://example.com',
+		`https://docs.google.com/forms/d/e/1FAIpQLSfHGZgoIkOHUwHnWeZTcNUU8b9OmQf3bq0SAEjiQomzWmemGg/viewform?usp=pp_url&entry.707071559=${reviewId}`,
 	)
 	await expect(page.getByText('Shorts are not allowed.')).toHaveCount(0)
 	await expect(page.getByRole('heading', { name: 'Automatic review' })).toHaveCount(0)
@@ -486,6 +488,7 @@ test('an unfinished review can ask you to wait partway through', async ({ page }
 
 	await expect(page.getByTestId('please-wait')).toBeVisible()
 	await expect(page.getByText('Please wait a moment.')).toBeVisible()
+	await expect(page.getByText('This may take a few minutes.')).toBeVisible()
 	await expect(page.getByTestId('wait-spinner')).toBeVisible()
 	const waitingPreview = page.getByTestId('please-wait').getByTestId('video-preview')
 	await expect(waitingPreview).toBeVisible()

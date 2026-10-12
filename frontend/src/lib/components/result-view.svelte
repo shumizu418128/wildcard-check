@@ -7,7 +7,7 @@
 		watchesVideo,
 		watchPledgesFor,
 	} from '$lib/catalog'
-	import { sheet, submissionUrl } from '$lib/sheet'
+	import { sheet, submissionUrlFor } from '$lib/sheet'
 	import type { ReviewSession } from '$lib/session.svelte'
 	import DialogClose from '$lib/components/dialog-close.svelte'
 	import RuleLines from '$lib/components/rule-lines.svelte'
@@ -215,10 +215,10 @@
 						{sheet.back}
 					</button>
 					{#if confirmText === sheet.keepVideoPhrase}
-						{#if submissionUrl}
+						{#if session.jobId}
 							<a
 								class="btn-primary w-full sm:w-auto"
-								href={submissionUrl}
+								href={submissionUrlFor(session.jobId)}
 								target="_blank"
 								rel="noopener noreferrer"
 							>

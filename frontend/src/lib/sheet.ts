@@ -1,9 +1,10 @@
 /**
- * Screen labels. submissionUrl is the Swissbeatbox submission page.
- * While it is empty, the submission button stays disabled.
+ * Screen labels. submissionUrlFor builds the Swissbeatbox Google Form with review id.
+ * While reviewId is empty, the submission button stays disabled.
  * The on-screen edition is 2027. GBB2026 / GBB26 / 2026-09-24 in the review text are placeholders.
  */
-export const submissionUrl = 'https://example.com'
+export const submissionUrlFor = (reviewId: string) =>
+	`https://docs.google.com/forms/d/e/1FAIpQLSfHGZgoIkOHUwHnWeZTcNUU8b9OmQf3bq0SAEjiQomzWmemGg/viewform?usp=pp_url&entry.707071559=${encodeURIComponent(reviewId)}`
 
 export const editionLabel = 'GBB2026-v0.1'
 
@@ -41,6 +42,7 @@ export const sheet = {
 	close: 'Close',
 	next: 'Next',
 	pleaseWait: 'Please wait a moment.',
+	pleaseWaitHint: 'This may take a few minutes.',
 	waitElapsed: 'Waiting',
 	fileBody: 'Post as a normal YouTube video, then review that URL here.',
 	filePost: 'Post it on YouTube',
