@@ -29,9 +29,6 @@
 			headingEl?.focus()
 		})
 	})
-	// プレミアは yt-dlp でコマを取れないので、手元のファイルから切り出す
-	const frameReviewId = () =>
-		session.source === 'youtube' && session.localVideoUrl === '' ? session.jobId : ''
 	const agreeAndNext = () => {
 		if (session.advancing) return
 		session.agreed = true
@@ -91,7 +88,6 @@
 				id={rule.id}
 				lines={detail.lines}
 				notes={detail.notes}
-				reviewId={frameReviewId()}
 				videoUrl={session.localVideoUrl}
 				rawUrl={session.rawUrl}
 			/>
@@ -116,12 +112,11 @@
 				id={rule.id}
 				lines={current.lines}
 				notes={current.notes}
-				reviewId={frameReviewId()}
 				videoUrl={session.localVideoUrl}
 			/>
 		{:else}
 			{#if current.id === 'INTRO-SAME-TAKE'}
-				<SameTakeCompare reviewId={frameReviewId()} videoUrl={session.localVideoUrl} />
+				<SameTakeCompare videoUrl={session.localVideoUrl} />
 			{/if}
 			<RuleLines lines={current.lines} notes={current.notes} />
 		{/if}

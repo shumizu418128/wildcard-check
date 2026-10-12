@@ -245,7 +245,7 @@ test('a file stops at the pre-review and does not offer submission', async ({ pa
 test('YouTube continues to the Swissbeatbox submission page', async ({ page }) => {
 	await open(page)
 	await chooseSolo(page)
-	await page.getByRole('button', { name: 'YouTube URL' }).click()
+	await page.getByLabel('Video file').setInputFiles(fixture)
 	await page.getByRole('textbox', { name: 'YouTube URL' }).fill('https://www.youtube.com/watch?v=abcdefghijk')
 	await fillRaw(page)
 	await stubYoutubeTitle(page, passingSoloTitle)
@@ -342,7 +342,7 @@ const startYoutube = async (page: Page) => {
 	await stubYoutubeTitle(page, passingSoloTitle)
 	await open(page)
 	await chooseSolo(page)
-	await page.getByRole('button', { name: 'YouTube URL' }).click()
+	await page.getByLabel('Video file').setInputFiles(fixture)
 	await page.getByRole('textbox', { name: 'YouTube URL' }).fill('https://www.youtube.com/watch?v=abcdefghijk')
 	await fillRaw(page)
 	await page.getByRole('button', { name: 'Start the review' }).click()
@@ -353,7 +353,7 @@ test('a title that does not match ends the review', async ({ page }) => {
 	await stubYoutubeTitle(page, 'Placeholder video title')
 	await open(page)
 	await chooseSolo(page)
-	await page.getByRole('button', { name: 'YouTube URL' }).click()
+	await page.getByLabel('Video file').setInputFiles(fixture)
 	await page.getByRole('textbox', { name: 'YouTube URL' }).fill('https://www.youtube.com/watch?v=abcdefghijk')
 	await fillRaw(page)
 	await page.getByRole('button', { name: 'Start the review' }).click()
@@ -431,7 +431,7 @@ test('a team visibility pledge appears once without an automatic review', async 
 	await fulfillReview(page, { ...doneReview, id: 'job-team-vis' })
 	await open(page)
 	await page.getByLabel('Category').selectOption('tag')
-	await page.getByRole('button', { name: 'YouTube URL' }).click()
+	await page.getByLabel('Video file').setInputFiles(fixture)
 	await page.getByRole('textbox', { name: 'YouTube URL' }).fill('https://www.youtube.com/watch?v=abcdefghijk')
 	await fillRaw(page)
 	await stubYoutubeTitle(page, passingTagTitle)
@@ -487,10 +487,7 @@ test('an unfinished review can ask you to wait partway through', async ({ page }
 	await expect(page.getByTestId('wait-spinner')).toBeVisible()
 	const waitingPreview = page.getByTestId('please-wait').getByTestId('video-preview')
 	await expect(waitingPreview).toBeVisible()
-	await expect(waitingPreview.getByTitle('Submitted video')).toHaveAttribute(
-		'src',
-		/https:\/\/www\.youtube-nocookie\.com\/embed\/abcdefghijk\?/,
-	)
+	await expect(waitingPreview.locator('video')).toHaveAttribute('src', /^blob:/)
 	await expect(page.getByRole('button', { name: 'Still reviewing' })).toHaveCount(0)
 	await expect(page.getByRole('button', { name: 'Next', exact: true })).toHaveCount(0)
 	await expect(page.getByTestId('wait-elapsed')).toContainText('0:0')
@@ -581,38 +578,19 @@ test('a YouTube review resumes from the same step after a reload', async ({ page
 	await expect(page.getByTestId('outcome')).toBeVisible()
 })
 
-test('a premiere URL asks for a video file before the review continues', async ({ page }) => {
+test('a YouTube review sends clips cut from the file', async ({ page }) => {
+	let posted = ''
 	await page.route('**/api/reviews', async (route) => {
 		if (route.request().method() !== 'POST') {
 			await route.continue()
 			return
 		}
-		const contentType = route.request().headers()['content-type'] ?? ''
-		if (!contentType.includes('multipart/form-data')) {
-			await route.continue()
-			return
-		}
-		const text = route.request().postDataBuffer()?.toString('utf8') ?? ''
-		if (!text.includes('name="intro_audio"')) {
-			// 初回 POST（ファイルなし）: premiere 判定のあと追加提出を要求
-			await route.fulfill({
-				status: 400,
-				contentType: 'application/json',
-				body: JSON.stringify({ detail: 'premiere_unavailable' }),
-			})
-			return
-		}
-		// 追加提出: source は youtube のまま。動画本体ではなく切り出した成果物を送る
-		expect(text).toMatch(/name="source"\r\n\r\nyoutube\r\n/)
-		expect(text).toContain('name="youtube_url"')
-		expect(text).toContain('abcdefghijk')
-		expect(text).toContain('name="intro_frame"')
-		expect(text).toContain('name="routine_frame"')
+		posted = route.request().postDataBuffer()?.toString('utf8') ?? ''
 		await route.fulfill({
 			status: 201,
 			contentType: 'application/json',
 			body: JSON.stringify({
-				id: 'job-premiere-file',
+				id: 'job-youtube-file',
 				source: 'youtube',
 				status: 'done',
 				rules: [
@@ -622,37 +600,35 @@ test('a premiere URL asks for a video file before the review continues', async (
 			}),
 		})
 	})
-	await stubYoutubeTitle(page, passingSoloTitle)
+	await startYoutube(page)
+	await expect(page).toHaveURL(/\/review\/job-youtube-file$/)
+	await expect(page.getByRole('heading', { name: 'You only get one submission' })).toBeVisible()
+	// 動画本体ではなく、切り出した素材と URL を一度に送る
+	expect(posted).toMatch(/name="source"\r\n\r\nyoutube\r\n/)
+	expect(posted).toContain('abcdefghijk')
+	expect(posted).toContain(rawLink)
+	for (const name of ['intro_audio', 'intro_frame', 'routine_frame']) {
+		expect(posted).toContain(`name="${name}"`)
+	}
+})
+
+test('the file is required and the raw link appears only with a YouTube URL', async ({ page }) => {
 	await open(page)
 	await chooseSolo(page)
-	await page.getByRole('button', { name: 'YouTube URL' }).click()
-	await page
-		.getByRole('textbox', { name: 'YouTube URL' })
-		.fill('https://www.youtube.com/watch?v=abcdefghijk')
-	await fillRaw(page)
+	await expect(page.getByRole('button', { name: 'File', exact: true })).toHaveCount(0)
+	await expect(page.getByLabel('Video file')).toHaveAttribute('required', '')
+	await expect(page.getByRole('textbox', { name: 'YouTube URL' })).not.toHaveAttribute('required')
+	await expect(page.getByRole('textbox', { name: 'Raw file link' })).toHaveCount(0)
+	await page.getByRole('textbox', { name: 'YouTube URL' }).fill('https://www.youtube.com/watch?v=abcdefghijk')
+	await expect(page.getByRole('textbox', { name: 'Raw file link' })).toHaveAttribute('required', '')
 	await page.getByRole('button', { name: 'Start the review' }).click()
-	const dialog = page.getByRole('dialog')
-	await expect(dialog).toBeVisible()
-	await expect(dialog.getByRole('heading', { name: 'Upload the video file' })).toBeVisible()
-	await expect(
-		dialog.getByText(
-			'This premiere is not available yet. Submit the same video file so the review can continue.',
-		),
-	).toBeVisible()
-	await expect(dialog.getByText('https://www.youtube.com/watch?v=abcdefghijk')).toBeVisible()
 	await expect(page).toHaveURL(/\/$/)
-	await expectCloseAtTopRight(dialog)
-	await dialog.getByLabel('Video file').setInputFiles(fixture)
-	await dialog.getByRole('button', { name: 'Continue with this file' }).click()
-	await expect(dialog).toBeHidden()
-	await expect(page).toHaveURL(/\/review\/job-premiere-file$/)
-	await expect(page.getByRole('heading', { name: 'You only get one submission' })).toBeVisible()
 })
 
 test('a Shorts URL is excluded before the review starts', async ({ page }) => {
 	await open(page)
 	await chooseSolo(page)
-	await page.getByRole('button', { name: 'YouTube URL' }).click()
+	await page.getByLabel('Video file').setInputFiles(fixture)
 	await page.getByRole('textbox', { name: 'YouTube URL' }).fill('https://www.youtube.com/shorts/abcdefghijk')
 	await fillRaw(page)
 	await page.getByRole('button', { name: 'Start the review' }).click()

@@ -4,7 +4,6 @@
 	import favicon from '$lib/assets/favicon.svg'
 	import { rules } from '$lib/catalog'
 	import EndReviewDialog from '$lib/components/end-review-dialog.svelte'
-	import PremiereFileDialog from '$lib/components/premiere-file-dialog.svelte'
 	import { editionLabel, sheet } from '$lib/sheet'
 	import { ReviewSession, reviewSessionKey } from '$lib/session.svelte'
 
@@ -44,4 +43,3 @@
 	</main>
 </div>
 <EndReviewDialog {session} />
-<PremiereFileDialog {session} />

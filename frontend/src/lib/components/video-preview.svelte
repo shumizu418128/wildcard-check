@@ -10,7 +10,6 @@
 	let frame = $state<HTMLIFrameElement | null>(null)
 	let clip = $state<HTMLVideoElement | null>(null)
 
-	// プレミアの埋め込みはまだ再生できないので、追加提出のファイルがあればそちらを出す
 	const fileUrl = () => session.localVideoUrl
 
 	const useMockEmbed = () =>

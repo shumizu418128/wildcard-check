@@ -5,12 +5,10 @@ from app.gateway.config import debug_enabled
 
 # debug=true のときだけ使うフィクスチャ動画 ID
 SHORT_VIDEO_ID = "SHORT-VIDEO"
-PREMIERE_VIDEO_ID = "PREMIRE-VID"
 PRIVATE_VIDEO_ID = "PRIVATE-VID"
 
 _DEBUG_ACCESS: dict[str, YoutubeAccess] = {
     SHORT_VIDEO_ID: "public",
-    PREMIERE_VIDEO_ID: "premiere",
     PRIVATE_VIDEO_ID: "private",
 }
 
@@ -37,7 +35,7 @@ def is_debug_short_fixture(url: str) -> bool:
 
 
 def debug_gate_delay() -> float:
-    """yt-dlp 判定の代わりに待つ秒数。"""
+    """YouTube Data API 判定の代わりに待つ秒数。"""
     return random.uniform(*_GATE_DELAY)
 
 

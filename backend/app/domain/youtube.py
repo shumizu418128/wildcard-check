@@ -1,9 +1,7 @@
 from typing import Literal, Protocol
 from urllib.parse import parse_qs, urlparse
 
-YoutubeAccess = Literal[
-    "public", "unlisted", "private", "premiere", "unavailable", "unknown"
-]
+YoutubeAccess = Literal["public", "unlisted", "private", "unknown"]
 
 
 class YoutubeInspector(Protocol):

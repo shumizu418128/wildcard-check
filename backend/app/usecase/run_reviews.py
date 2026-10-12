@@ -33,12 +33,13 @@ class RunReviews:
             if review.source == "youtube" and is_debug_fixture(review.youtube_url):
                 await self._save_debug_fixture(review)
                 return
+            clips = review_input.clips
+            if clips is None:
+                raise RuntimeError("clips")
             for rule in self.rules:
                 if not rule.applies(review):
                     continue
-                ok = await asyncio.to_thread(
-                    rule.evaluate, review, review_input.clips, self.judge
-                )
+                ok = await asyncio.to_thread(rule.evaluate, review, clips, self.judge)
                 await asyncio.to_thread(
                     self.repository.save_result, review.id, rule.id, ok
                 )

@@ -140,18 +140,25 @@
 		font-weight: 500;
 		color: var(--ink);
 	}
-	.field-shell {
+	.field-drop {
 		display: flex;
-		height: 48px;
+		min-height: 160px;
+		flex-direction: column;
 		align-items: center;
+		justify-content: center;
+		gap: 8px;
 		border-radius: 8px;
-		border: 1px solid var(--line);
+		border: 2px dashed var(--line);
 		background: var(--surface);
-		padding: 0 16px;
+		padding: 24px;
+		text-align: center;
 		font-size: 16px;
 		line-height: 24px;
 	}
-	.field-file:has(> input:focus-visible) > .field-shell {
+	.field-file:hover > .field-drop {
+		border-color: var(--primary);
+	}
+	.field-file:has(> input:focus-visible) > .field-drop {
 		border-color: var(--focus-ring);
 		outline: 2px solid var(--focus-ring);
 		outline-offset: 0;

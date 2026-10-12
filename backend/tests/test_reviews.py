@@ -11,7 +11,7 @@ from app.domain.judge import Judge, is_yes
 from app.domain.review import Review
 from app.domain.youtube import YoutubeAccess
 from app.gateway.clef import data_url
-from app.gateway.yt_dlp_youtube import YtDlpYoutubeInspector
+from app.gateway.youtube_data_api import YoutubeDataApiInspector
 from app.http.clips import MAX_AUDIO_BYTES
 from app.http.controller import register
 from app.http.origin import header, require_origin
@@ -27,7 +27,7 @@ from app.usecase.rules.intro_same_take import IntroSameTake
 from app.usecase.rules.sub_raw import SubRaw
 from app.usecase.run_reviews import ReviewInput, RunReviews
 
-PLAYABLE_FORMAT = {"vcodec": "avc1", "acodec": "mp4a"}
+CLIPS = ReviewClips(b"RIFF\x00\x00\x00\x00WAVEaudio", b"\xff\xd8i", b"\xff\xd8r")
 
 
 class FixedInspector:
@@ -49,20 +49,6 @@ def sample(category: str, source: str) -> Review:
         "https://example.com/raw",
         "running",
     )
-
-
-class FakeMedia:
-    def __init__(self) -> None:
-        self.frames: list[float] = []
-        self.audios: list[float] = []
-
-    def frame(self, review: Review, seconds: float) -> bytes:
-        self.frames.append(seconds)
-        return f"frame-{seconds}".encode()
-
-    def audio(self, review: Review, seconds: float) -> bytes:
-        self.audios.append(seconds)
-        return b"audio"
 
 
 class FakeTranscriber:
@@ -99,7 +85,7 @@ class NoulJudge:
 
 
 def default_rules():
-    return build_rules(FixedInspector(), FakeMedia(), FakeTranscriber(""))
+    return build_rules(FixedInspector(), FakeTranscriber(""))
 
 
 def applicable_ids(category: str, source: str) -> list[str]:
@@ -195,18 +181,14 @@ class GenVisibilityTests(unittest.TestCase):
     def test_public_video_passes(self):
         inspector = FixedInspector("public")
         rule = GenVisibility(inspector)
-        self.assertTrue(rule.evaluate(sample("solo", "youtube"), None, UnusedJudge()))
+        self.assertTrue(rule.evaluate(sample("solo", "youtube"), CLIPS, UnusedJudge()))
         self.assertEqual(inspector.urls, ["https://youtu.be/abcdefghijk"])
 
-    def test_premiere_passes_visibility_rule(self):
-        rule = GenVisibility(FixedInspector("premiere"))
-        self.assertTrue(rule.evaluate(sample("solo", "youtube"), None, UnusedJudge()))
-
     def test_blocked_access_fails(self):
-        for access in ("unlisted", "private", "unavailable", "unknown"):
+        for access in ("unlisted", "private", "unknown"):
             rule = GenVisibility(FixedInspector(access))
             self.assertFalse(
-                rule.evaluate(sample("solo", "youtube"), None, UnusedJudge()), access
+                rule.evaluate(sample("solo", "youtube"), CLIPS, UnusedJudge()), access
             )
 
 
@@ -224,7 +206,7 @@ class SubRawTests(unittest.TestCase):
             patch("app.usecase.rules.sub_raw._is_safe_url", return_value=True),
             patch("app.usecase.rules.sub_raw.requests.get", side_effect=[response]),
         ):
-            return SubRaw().evaluate(review, None, UnusedJudge())
+            return SubRaw().evaluate(review, CLIPS, UnusedJudge())
 
     def test_missing_link_fails(self):
         missing = self.response(404)
@@ -251,7 +233,7 @@ class SubRawTests(unittest.TestCase):
                 side_effect=requests.Timeout("slow"),
             ),
         ):
-            ok = SubRaw().evaluate(review, None, UnusedJudge())
+            ok = SubRaw().evaluate(review, CLIPS, UnusedJudge())
         self.assertTrue(ok)
 
     def test_login_host_fails_without_a_second_request(self):
@@ -264,7 +246,7 @@ class SubRawTests(unittest.TestCase):
                 "app.usecase.rules.sub_raw.requests.get", return_value=redirected
             ) as get,
         ):
-            ok = SubRaw().evaluate(review, None, UnusedJudge())
+            ok = SubRaw().evaluate(review, CLIPS, UnusedJudge())
         self.assertFalse(ok)
         self.assertEqual(get.call_count, 1)
 
@@ -290,7 +272,7 @@ class SubRawTests(unittest.TestCase):
             patch("app.usecase.rules.sub_raw.socket.getaddrinfo", return_value=dns),
             patch("app.usecase.rules.sub_raw.requests.get") as get,
         ):
-            ok = SubRaw().evaluate(review, None, UnusedJudge())
+            ok = SubRaw().evaluate(review, CLIPS, UnusedJudge())
         self.assertTrue(ok)
         get.assert_not_called()
 
@@ -302,54 +284,33 @@ class SubRawTests(unittest.TestCase):
 
 class IntroRequiredTests(unittest.TestCase):
     def test_greeting_passes(self):
-        media = FakeMedia()
         transcriber = FakeTranscriber("My name is Taro, and this is my solo wildcard.")
         judge = NoulJudge(0.9)
-        rule = IntroRequired(media, transcriber)
-        self.assertTrue(rule.evaluate(sample("solo", "youtube"), None, judge))
-        self.assertEqual(media.audios, [30])
+        rule = IntroRequired(transcriber)
+        self.assertTrue(rule.evaluate(sample("solo", "youtube"), CLIPS, judge))
+        self.assertEqual(transcriber.audios, [CLIPS.intro_audio])
         self.assertEqual(transcriber.languages, ["en"])
         self.assertIsNone(judge.calls[0][1])
 
-    def test_file_clips_skip_media(self):
-        media = FakeMedia()
-        transcriber = FakeTranscriber("My name is Taro, and this is my solo wildcard.")
-        clips = ReviewClips(b"RIFF\x00\x00\x00\x00WAVEaudio", b"\xff\xd8i", b"\xff\xd8r")
-        rule = IntroRequired(media, transcriber)
-        self.assertTrue(rule.evaluate(sample("solo", "file"), clips, NoulJudge(0.9)))
-        self.assertEqual(media.audios, [])
-        self.assertEqual(transcriber.audios, [clips.intro_audio])
-
     def test_no_greeting_fails(self):
-        rule = IntroRequired(FakeMedia(), FakeTranscriber("beatbox"))
-        self.assertFalse(rule.evaluate(sample("solo", "youtube"), None, NoulJudge(0.1)))
+        rule = IntroRequired(FakeTranscriber("beatbox"))
+        self.assertFalse(rule.evaluate(sample("solo", "youtube"), CLIPS, NoulJudge(0.1)))
 
     def test_silent_intro_skips_judge(self):
-        rule = IntroRequired(FakeMedia(), FakeTranscriber("  "))
-        self.assertFalse(rule.evaluate(sample("solo", "youtube"), None, UnusedJudge()))
+        rule = IntroRequired(FakeTranscriber("  "))
+        self.assertFalse(rule.evaluate(sample("solo", "youtube"), CLIPS, UnusedJudge()))
 
 
 class FrameRuleTests(unittest.TestCase):
-    def test_same_take_extracts_youtube_frames(self):
-        media = FakeMedia()
-        judge = NoulJudge(0.8)
-        self.assertTrue(
-            IntroSameTake(media).evaluate(sample("solo", "youtube"), None, judge)
-        )
-        self.assertEqual(media.frames, [2, 60])
-        self.assertEqual(judge.calls[0][1], [b"frame-2", b"frame-60"])
-
     def test_same_take_uses_uploaded_frames(self):
-        media = FakeMedia()
         judge = NoulJudge(0.8)
         clips = ReviewClips(b"audio", b"intro", b"routine")
-        self.assertTrue(IntroSameTake(media).evaluate(sample("solo", "file"), clips, judge))
-        self.assertEqual(media.frames, [])
+        self.assertTrue(IntroSameTake().evaluate(sample("solo", "youtube"), clips, judge))
         self.assertEqual(judge.calls[0][1], [b"intro", b"routine"])
 
     def test_same_take_fails_on_no(self):
-        rule = IntroSameTake(FakeMedia())
-        self.assertFalse(rule.evaluate(sample("solo", "youtube"), None, NoulJudge(0.2)))
+        rule = IntroSameTake()
+        self.assertFalse(rule.evaluate(sample("solo", "file"), CLIPS, NoulJudge(0.2)))
 
     def test_threshold_is_inclusive(self):
         self.assertTrue(is_yes({"answers": {"a": {"type": "noul", "noul": 0.5}}}, "a"))
@@ -357,101 +318,77 @@ class FrameRuleTests(unittest.TestCase):
 
 class GateYoutubeTests(unittest.TestCase):
     def test_returns_inspector_access(self):
-        gate = GateYoutube(FixedInspector("premiere"))
-        self.assertEqual(gate.execute("https://youtu.be/abcdefghijk"), "premiere")
+        gate = GateYoutube(FixedInspector("unlisted"))
+        self.assertEqual(gate.execute("https://youtu.be/abcdefghijk"), "unlisted")
 
 
-class YtDlpYoutubeInspectorTests(unittest.TestCase):
-    def test_upcoming_live_status_is_premiere(self):
-        inspector = YtDlpYoutubeInspector()
-        self.assertEqual(
-            inspector._from_info({"live_status": "is_upcoming"}),
-            "premiere",
-        )
+class YoutubeDataApiInspectorTests(unittest.TestCase):
+    def response(self, payload: object, ok: bool = True) -> MagicMock:
+        response = MagicMock()
+        response.ok = ok
+        response.json.return_value = payload
+        return response
 
-    def test_unlisted_availability(self):
-        inspector = YtDlpYoutubeInspector()
-        self.assertEqual(
-            inspector._from_info({"availability": "unlisted"}),
-            "unlisted",
-        )
-
-    def test_public_with_formats(self):
-        inspector = YtDlpYoutubeInspector()
-        info = {"availability": "public", "formats": [PLAYABLE_FORMAT]}
-        self.assertEqual(inspector._from_info(info), "public")
-
-    def test_public_without_downloadable_formats(self):
-        inspector = YtDlpYoutubeInspector()
-        storyboard = {"vcodec": "none", "acodec": "none"}
-        drm = {"vcodec": "avc1", "acodec": "mp4a", "has_drm": True}
-        for formats in ([], [storyboard], [drm]):
-            info = {"availability": "public", "formats": formats}
-            self.assertEqual(inspector._from_info(info), "unavailable", formats)
-
-    def test_premiere_error_message(self):
-        inspector = YtDlpYoutubeInspector()
-        self.assertEqual(
-            inspector._from_error("ERROR: [youtube] x: Premieres in 3 hours"),
-            "premiere",
-        )
-
-    def test_extract_info_upcoming(self):
-        inspector = YtDlpYoutubeInspector()
-        fake_ydl = MagicMock()
-        fake_ydl.__enter__.return_value = fake_ydl
-        fake_ydl.__exit__.return_value = False
-        fake_ydl.extract_info.return_value = {
-            "live_status": "is_upcoming",
-            "availability": "public",
-        }
-        with patch(
-            "app.gateway.yt_dlp_youtube.yt_dlp.YoutubeDL", return_value=fake_ydl
+    def inspect(self, response: MagicMock, key: str = "key") -> YoutubeAccess:
+        with (
+            patch.dict("os.environ", {"debug": "", "YOUTUBE_API_KEY": key}),
+            patch(
+                "app.gateway.youtube_data_api.requests.get", return_value=response
+            ) as get,
         ):
-            self.assertEqual(
-                inspector.inspect("https://youtu.be/abcdefghijk"), "premiere"
-            )
+            access = YoutubeDataApiInspector().inspect("https://youtu.be/abcdefghijk")
+        self.last_get = get
+        return access
+
+    def test_privacy_status_is_returned(self):
+        for privacy in ("public", "unlisted", "private"):
+            payload = {"items": [{"status": {"privacyStatus": privacy}}]}
+            self.assertEqual(self.inspect(self.response(payload)), privacy)
+        params = self.last_get.call_args.kwargs["params"]
+        self.assertEqual(params["id"], "abcdefghijk")
+        self.assertEqual(params["part"], "status")
+
+    def test_missing_video_is_private(self):
+        self.assertEqual(self.inspect(self.response({"items": []})), "private")
+
+    def test_api_error_is_unknown(self):
+        self.assertEqual(self.inspect(self.response({}, ok=False)), "unknown")
+        self.assertEqual(self.inspect(self.response({"items": [{}]})), "unknown")
+
+    def test_missing_key_skips_request(self):
+        self.assertEqual(self.inspect(self.response({}), key=""), "unknown")
+        self.last_get.assert_not_called()
+
+    def test_network_error_is_unknown(self):
+        with (
+            patch.dict("os.environ", {"debug": "", "YOUTUBE_API_KEY": "key"}),
+            patch(
+                "app.gateway.youtube_data_api.requests.get",
+                side_effect=requests.Timeout("slow"),
+            ),
+        ):
+            access = YoutubeDataApiInspector().inspect("https://youtu.be/abcdefghijk")
+        self.assertEqual(access, "unknown")
 
     def test_debug_fixture_urls(self):
-        inspector = YtDlpYoutubeInspector()
+        inspector = YoutubeDataApiInspector()
         with (
             patch.dict("os.environ", {"debug": "true"}),
             patch(
-                "app.gateway.yt_dlp_youtube.debug_gate_delay", return_value=0
+                "app.gateway.youtube_data_api.debug_gate_delay", return_value=0
             ) as delay,
+            patch("app.gateway.youtube_data_api.requests.get") as get,
         ):
             self.assertEqual(
                 inspector.inspect("https://www.youtube.com/watch?v=SHORT-VIDEO"),
                 "public",
             )
             self.assertEqual(
-                inspector.inspect("https://www.youtube.com/watch?v=PREMIRE-VID"),
-                "premiere",
-            )
-            self.assertEqual(
                 inspector.inspect("https://www.youtube.com/watch?v=PRIVATE-VID"),
                 "private",
             )
-        self.assertEqual(delay.call_count, 3)
-
-    def test_debug_fixture_off_calls_yt_dlp(self):
-        inspector = YtDlpYoutubeInspector()
-        fake_ydl = MagicMock()
-        fake_ydl.__enter__.return_value = fake_ydl
-        fake_ydl.__exit__.return_value = False
-        fake_ydl.extract_info.return_value = {
-            "availability": "public",
-            "formats": [PLAYABLE_FORMAT],
-        }
-        with patch.dict("os.environ", {"debug": ""}, clear=False):
-            with patch(
-                "app.gateway.yt_dlp_youtube.yt_dlp.YoutubeDL", return_value=fake_ydl
-            ):
-                self.assertEqual(
-                    inspector.inspect("https://www.youtube.com/watch?v=SHORT-VIDEO"),
-                    "public",
-                )
-        fake_ydl.extract_info.assert_called_once()
+        self.assertEqual(delay.call_count, 2)
+        get.assert_not_called()
 
 
 class RunReviewsTests(unittest.IsolatedAsyncioTestCase):
@@ -646,9 +583,10 @@ class ClipUploadTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["detail"], "intro_frame")
 
-    def test_premiere_without_clips_asks_for_a_file(self):
+    def test_youtube_without_clips_is_rejected(self):
         app = build_api()
-        app.state.gate_youtube = GateYoutube(FixedInspector("premiere"))
+        inspector = FixedInspector("public")
+        app.state.gate_youtube = GateYoutube(inspector)
         client = TestClient(app)
         response = client.post(
             "/api/reviews",
@@ -660,7 +598,29 @@ class ClipUploadTests(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["detail"], "premiere_unavailable")
+        self.assertEqual(response.json()["detail"], "intro_audio")
+        self.assertEqual(inspector.urls, [])
+
+    def test_unlisted_youtube_is_rejected(self):
+        app = build_api()
+        app.state.gate_youtube = GateYoutube(FixedInspector("unlisted"))
+        client = TestClient(app)
+        response = client.post(
+            "/api/reviews",
+            data={
+                "category": "solo",
+                "source": "youtube",
+                "youtube_url": "https://youtu.be/abcdefghijk",
+                "raw_url": "https://example.com/raw",
+            },
+            files={
+                "intro_audio": ("intro.wav", wav_bytes(), "audio/wav"),
+                "intro_frame": ("intro.jpg", jpeg_bytes(), "image/jpeg"),
+                "routine_frame": ("routine.jpg", jpeg_bytes(), "image/jpeg"),
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "unlisted_url")
 
     def test_file_post_keeps_clips(self):
         app = build_api()

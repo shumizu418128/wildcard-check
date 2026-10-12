@@ -9,12 +9,7 @@ import { categories, sheet, type CategoryId, type RuleStatus, type SourceKind } 
 import { fetchYoutubeTitle, titleMatches } from '$lib/title-format'
 import { ensureDebugMode } from '$lib/debug'
 import { extractReviewClips } from '$lib/extract-clips'
-import {
-	isNonPublicUrlCode,
-	isShortsUrl,
-	premiereUnavailableCode,
-	shortsUrlCode,
-} from '$lib/youtube'
+import { isNonPublicUrlCode, isShortsUrl, shortsUrlCode } from '$lib/youtube'
 
 export const reviewSessionKey = 'review-session'
 
@@ -68,7 +63,6 @@ export class ReviewSession {
 	abortMessage = $state('')
 	abortKind = $state<AbortKind | ''>('')
 	abortTitle = $state('')
-	premierePending = $state(false)
 	preparing = $state(false)
 	submitting = $state(false)
 	advancing = $state(false)
@@ -121,55 +115,44 @@ export class ReviewSession {
 
 	activeFixes = () => (this.pledgeStep === 'watch' ? this.watchFixes() : this.plainFixes())
 
-	start = async (file: File | null, options?: { premiereFile?: boolean }) => {
-		if (this.submitting || this.category === '') return
-		const premiereFile = options?.premiereFile === true
-		const source: SourceKind = premiereFile ? 'youtube' : this.source
+	start = async (file: File | null) => {
+		if (this.submitting || this.category === '' || !file) return
 		const youtubeUrl = this.youtubeUrl.trim()
-		const rawUrl = this.source === 'youtube' || premiereFile ? this.rawUrl.trim() : ''
-		if (!premiereFile && source === 'file' && !file) return
-		if (source === 'youtube' && (youtubeUrl === '' || rawUrl === '')) return
-		if (premiereFile && !file) return
+		const rawUrl = this.source === 'youtube' ? this.rawUrl.trim() : ''
+		if (this.source === 'youtube' && (youtubeUrl === '' || rawUrl === '')) return
 
 		this.submitting = true
 		this.resetForStart()
-		if (!premiereFile) this.premierePending = false
 
-		if (!premiereFile && source === 'file' && file) {
+		if (this.source === 'file') {
 			await this.startFile(file)
 			return
 		}
 
 		try {
-			if (source === 'youtube' && !premiereFile && isShortsUrl(youtubeUrl)) {
+			if (isShortsUrl(youtubeUrl)) {
 				this.abortReview(sheet.shortsUrlError, 'shorts')
 				return
 			}
-			if (source === 'youtube' && !premiereFile) {
-				await ensureDebugMode()
-				const foundTitle = await fetchYoutubeTitle(youtubeUrl, this.category)
-				if (!titleMatches(foundTitle, this.category)) {
-					this.abortReview(sheet.titleUrlError, 'title', foundTitle)
-					return
-				}
+			await ensureDebugMode()
+			const foundTitle = await fetchYoutubeTitle(youtubeUrl, this.category)
+			if (!titleMatches(foundTitle, this.category)) {
+				this.abortReview(sheet.titleUrlError, 'title', foundTitle)
+				return
 			}
+			this.preparing = true
+			const clips = await extractReviewClips(file)
 			const body = new FormData()
 			body.set('category', this.category)
-			body.set('source', source)
-			if (source === 'youtube') {
-				body.set('youtube_url', youtubeUrl)
-				body.set('raw_url', rawUrl)
-			}
-			if (premiereFile && file) {
-				this.preparing = true
-				const clips = await extractReviewClips(file)
-				body.set('intro_audio', clips.introAudio, 'intro.wav')
-				body.set('intro_frame', clips.introFrame, 'intro.jpg')
-				body.set('routine_frame', clips.routineFrame, 'routine.jpg')
-			}
+			body.set('source', 'youtube')
+			body.set('youtube_url', youtubeUrl)
+			body.set('raw_url', rawUrl)
+			body.set('intro_audio', clips.introAudio, 'intro.wav')
+			body.set('intro_frame', clips.introFrame, 'intro.jpg')
+			body.set('routine_frame', clips.routineFrame, 'routine.jpg')
 			this.preparing = false
 			this.releaseLocalVideo()
-			if (file) this.localVideoUrl = URL.createObjectURL(file)
+			this.localVideoUrl = URL.createObjectURL(file)
 			this.stopWatch()
 			const response = await fetch('/api/reviews', { method: 'POST', body })
 			if (response.status === 429) {
@@ -187,14 +170,8 @@ export class ReviewSession {
 					this.abortReview(sheet.visibilityUrlError, 'visibility')
 					return
 				}
-				if (detail === premiereUnavailableCode) {
-					this.premierePending = true
-					return
-				}
 				throw new Error('start')
 			}
-			this.premierePending = false
-			if (premiereFile) this.source = 'youtube'
 			const payload = (await response.json()) as ReviewResource
 			this.takeRawUrl(payload)
 			this.jobId = payload.id
@@ -273,18 +250,6 @@ export class ReviewSession {
 		this.returnToIntake()
 		this.error = message
 		void goto('/')
-	}
-
-	dismissPremiere = () => {
-		this.premierePending = false
-		this.error = ''
-		this.preparing = false
-		this.submitting = false
-	}
-
-	continueWithPremiereFile = async (file: File) => {
-		if (!file || this.submitting) return
-		await this.start(file, { premiereFile: true })
 	}
 
 	stopWatch = () => {
@@ -620,7 +585,6 @@ export class ReviewSession {
 		this.abortMessage = ''
 		this.abortKind = ''
 		this.abortTitle = ''
-		this.premierePending = false
 		this.preparing = false
 		this.submitting = false
 	}

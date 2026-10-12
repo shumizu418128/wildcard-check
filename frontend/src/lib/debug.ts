@@ -1,10 +1,9 @@
 import { youtubeVideoId } from './youtube.ts'
 
 export const debugShortVideoId = 'SHORT-VIDEO'
-export const debugPremiereVideoId = 'PREMIRE-VID'
 export const debugPrivateVideoId = 'PRIVATE-VID'
 
-const fixtureIds = new Set([debugShortVideoId, debugPremiereVideoId, debugPrivateVideoId])
+const fixtureIds = new Set([debugShortVideoId, debugPrivateVideoId])
 
 const categoryWord: Record<string, string> = {
 	solo: 'Solo',

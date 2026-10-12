@@ -13,6 +13,6 @@ class GenVisibility:
     def applies(self, review: Review) -> bool:
         return review.source == "youtube"
 
-    def evaluate(self, review: Review, clips: ReviewClips | None, judge: Judge) -> bool:
-        """一般公開でダウンロードできれば True。プレミアはファイル追加提出に回すので True。"""
-        return self.inspector.inspect(review.youtube_url) in ("public", "premiere")
+    def evaluate(self, review: Review, clips: ReviewClips, judge: Judge) -> bool:
+        """一般公開なら True。"""
+        return self.inspector.inspect(review.youtube_url) == "public"

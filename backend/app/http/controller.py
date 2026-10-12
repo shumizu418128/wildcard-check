@@ -24,11 +24,10 @@ from app.http.schema import AgreementRequest, ReviewResponse
 from app.usecase.create_review import CreateReview
 from app.usecase.gate_youtube import GateYoutube
 from app.usecase.get_review import GetReview
-from app.usecase.get_same_take_frame import GetSameTakeFrame
 from app.usecase.record_agreement import RecordAgreement
 from app.usecase.run_reviews import ReviewInput, RunReviews
 
-# private / unlisted は即拒否。premiere は別扱い（ファイル追加提出）。
+# private / unlisted は即拒否
 _BLOCKED_ACCESS: dict[YoutubeAccess, str] = {
     "private": "private_url",
     "unlisted": "unlisted_url",
@@ -66,29 +65,14 @@ def register(app: FastAPI, origin: Callable[..., Any]) -> None:
         if source_kind == "youtube" and raw_url == "":
             raise HTTPException(status_code=400, detail="raw_url")
 
-        access: YoutubeAccess | None = None
+        clips = await read_review_clips(intro_audio, intro_frame, routine_frame)
+
         if source_kind == "youtube":
-            # premiere 判定は yt-dlp のため時間がかかることがある。
-            # その結果を、この POST のレスポンスで返す。
             gate: GateYoutube = request.app.state.gate_youtube
             access = await asyncio.to_thread(gate.execute, youtube_url)
-            if access != "premiere":
-                blocked = _BLOCKED_ACCESS.get(access)
-                if blocked is not None:
-                    raise HTTPException(status_code=400, detail=blocked)
-
-        clips = None
-        needs_clips = source_kind == "file" or access == "premiere"
-        if needs_clips:
-            # 初回のプレミア POST は成果物なし。ダイアログでファイルを足して再送する。
-            if (
-                access == "premiere"
-                and intro_audio is None
-                and intro_frame is None
-                and routine_frame is None
-            ):
-                raise HTTPException(status_code=400, detail="premiere_unavailable")
-            clips = await read_review_clips(intro_audio, intro_frame, routine_frame)
+            blocked = _BLOCKED_ACCESS.get(access)
+            if blocked is not None:
+                raise HTTPException(status_code=400, detail=blocked)
 
         create: CreateReview = request.app.state.create_review
         run: RunReviews = request.app.state.run_reviews
@@ -106,21 +90,6 @@ def register(app: FastAPI, origin: Callable[..., Any]) -> None:
         if view is None:
             raise HTTPException(status_code=404, detail="job")
         return present(view)
-
-    @router.get("/api/reviews/{review_id}/frames/{part}")
-    def read_same_take_frame(review_id: str, part: str, request: Request):
-        get_frame: GetSameTakeFrame = request.app.state.get_same_take_frame
-        try:
-            image = get_frame.execute(review_id, part)
-        except RuntimeError as error:
-            raise HTTPException(status_code=502, detail="frame") from error
-        if image is None:
-            raise HTTPException(status_code=404, detail="frame")
-        return Response(
-            content=image,
-            media_type="image/jpeg",
-            headers={"Cache-Control": "private, max-age=3600"},
-        )
 
     @router.post("/api/reviews/{review_id}/agreements", status_code=204)
     def create_agreement(review_id: str, body: AgreementRequest, request: Request):

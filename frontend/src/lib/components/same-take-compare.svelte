@@ -3,7 +3,7 @@
 	import { sheet } from '$lib/sheet'
 	import { blobToDataUrl, closeVideo, jpegFromVideo, openVideo, seekVideo } from '$lib/video-frame'
 
-	let { reviewId = '', videoUrl = '' }: { reviewId?: string; videoUrl?: string } = $props()
+	let { videoUrl = '' }: { videoUrl?: string } = $props()
 
 	type Part = 'intro' | 'routine'
 
@@ -24,7 +24,7 @@
 		captured = {}
 		failed = {}
 		const url = videoUrl
-		if (reviewId !== '' || url === '') return
+		if (url === '') return
 		let active = true
 		let video: HTMLVideoElement | null = null
 		void (async () => {
@@ -53,7 +53,6 @@
 
 	const frameSrc = (part: Part) => {
 		if (failed[part]) return placeholders[part]
-		if (reviewId !== '') return `/api/reviews/${encodeURIComponent(reviewId)}/frames/${part}`
 		return captured[part] ?? placeholders[part]
 	}
 

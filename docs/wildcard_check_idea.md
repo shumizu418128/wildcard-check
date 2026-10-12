@@ -27,7 +27,7 @@ LOW
 ### GEN-VISIBILITY 動画を一般公開する
 - level: 2
 - risk: HIGH
-- 実装: 提出ゲート `GateYoutube` + バックエンド `GenVisibility`（public / premiere のみ可）。非公開・限定公開は拒否。プレミアはファイル追加提出へ誘導
+- 実装: 提出ゲート `GateYoutube` + バックエンド `GenVisibility`（YouTube Data API の `privacyStatus` が public のときだけ可）。非公開・限定公開は拒否
 
 ### TITLE-FORMAT 動画タイトル
 - level: 2

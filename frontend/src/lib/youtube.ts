@@ -12,9 +12,6 @@ export const shortsUrlCode = 'shorts_url'
 export const privateUrlCode = 'private_url'
 export const unlistedUrlCode = 'unlisted_url'
 
-/** `detail` when yt-dlp cannot fetch a scheduled premiere yet. */
-export const premiereUnavailableCode = 'premiere_unavailable'
-
 export const nonPublicUrlCodes = new Set([privateUrlCode, unlistedUrlCode])
 
 export const isShortsUrl = (value: string) => shortsUrlPattern.test(value.trim())

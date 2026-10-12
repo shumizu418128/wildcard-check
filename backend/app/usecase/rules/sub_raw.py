@@ -48,7 +48,7 @@ class SubRaw:
     def applies(self, review: Review) -> bool:
         return review.source == "youtube" and review.raw_url.strip() != ""
 
-    def evaluate(self, review: Review, clips: ReviewClips | None, judge: Judge) -> bool:
+    def evaluate(self, review: Review, clips: ReviewClips, judge: Judge) -> bool:
         """死んでいるリンクとログイン着地だけ False。確認できないときは True。"""
         return not link_is_dead(review.raw_url)
 

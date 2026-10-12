@@ -12,7 +12,6 @@
 		lines,
 		notes = [],
 		videoTitle = '',
-		reviewId = '',
 		videoUrl = '',
 		rawUrl = '',
 	}: {
@@ -20,7 +19,6 @@
 		lines: Verdict[]
 		notes?: string[]
 		videoTitle?: string
-		reviewId?: string
 		videoUrl?: string
 		rawUrl?: string
 	} = $props()
@@ -59,7 +57,7 @@
 		<VisibilityCompare />
 	{/if}
 	{#if id === 'INTRO-SAME-TAKE'}
-		<SameTakeCompare {reviewId} {videoUrl} />
+		<SameTakeCompare {videoUrl} />
 	{/if}
 </div>
 {#if lines.length > 0 || notes.length > 0}

@@ -6,6 +6,7 @@ from pathlib import Path
 url_env = "SUPABASE_URL"
 key_env = "SUPABASE_KEY"
 origin_env = "ORIGIN_SECRET"
+youtube_key_env = "YOUTUBE_API_KEY"
 
 
 def load_env() -> None:
@@ -66,6 +67,11 @@ def supabase_credentials() -> tuple[str, str]:
 def origin_secret() -> str:
     load_env()
     return os.environ.get(origin_env, "").strip()
+
+
+def youtube_api_key() -> str:
+    load_env()
+    return os.environ.get(youtube_key_env, "").strip()
 
 
 def debug_enabled() -> bool:

@@ -14,7 +14,7 @@ class NoShort:
     def applies(self, review: Review) -> bool:
         return review.source == "youtube"
 
-    def evaluate(self, review: Review, clips: ReviewClips | None, judge: Judge) -> bool:
+    def evaluate(self, review: Review, clips: ReviewClips, judge: Judge) -> bool:
         """通常の YouTube 動画なら True。/shorts/ で開き、/shorts/ のまま残れば Shorts。"""
         video_id = youtube_video_id(review.youtube_url)
         if video_id == "":
