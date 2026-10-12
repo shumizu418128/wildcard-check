@@ -132,21 +132,13 @@ export class ReviewSession {
 		if (premiereFile && !file) return
 
 		this.submitting = true
-		this.error = ''
-		this.abortMessage = ''
-		this.abortKind = ''
-		this.abortTitle = ''
+		this.resetForStart()
 		if (!premiereFile) this.premierePending = false
-		this.pledgeIndex = 0
-		this.pledgeStep = 'plain'
-		this.autoCursor = -1
-		this.plainAutoSeen = false
-		this.watchAutoSeen = false
-		this.agreed = false
-		this.rules = []
-		this.jobDone = false
-		this.jobId = ''
-		this.advancing = false
+
+		if (!premiereFile && source === 'file' && file) {
+			await this.startFile(file)
+			return
+		}
 
 		try {
 			if (source === 'youtube' && !premiereFile && isShortsUrl(youtubeUrl)) {
@@ -168,7 +160,7 @@ export class ReviewSession {
 				body.set('youtube_url', youtubeUrl)
 				body.set('raw_url', rawUrl)
 			}
-			if (file && (premiereFile || source === 'file')) {
+			if (premiereFile && file) {
 				this.preparing = true
 				const clips = await extractReviewClips(file)
 				body.set('intro_audio', clips.introAudio, 'intro.wav')
@@ -216,6 +208,71 @@ export class ReviewSession {
 			this.preparing = false
 			this.submitting = false
 		}
+	}
+
+	resetForStart = () => {
+		this.error = ''
+		this.abortMessage = ''
+		this.abortKind = ''
+		this.abortTitle = ''
+		this.pledgeIndex = 0
+		this.pledgeStep = 'plain'
+		this.autoCursor = -1
+		this.plainAutoSeen = false
+		this.watchAutoSeen = false
+		this.agreed = false
+		this.rules = []
+		this.jobDone = false
+		this.jobId = ''
+		this.advancing = false
+	}
+
+	// 切り出しと送信を待たずに誓約へ進め、その間に裏で送る
+	startFile = async (file: File) => {
+		this.releaseLocalVideo()
+		this.localVideoUrl = URL.createObjectURL(file)
+		this.stopWatch()
+		const watchId = this.watchId
+		this.phase = 'work'
+		void this.submitFile(file, watchId)
+		try {
+			await goto(this.reviewPath())
+		} finally {
+			this.submitting = false
+		}
+	}
+
+	submitFile = async (file: File, watchId: number) => {
+		try {
+			const clips = await extractReviewClips(file)
+			if (watchId !== this.watchId) return
+			const body = new FormData()
+			body.set('category', this.category)
+			body.set('source', 'file')
+			body.set('intro_audio', clips.introAudio, 'intro.wav')
+			body.set('intro_frame', clips.introFrame, 'intro.jpg')
+			body.set('routine_frame', clips.routineFrame, 'routine.jpg')
+			const response = await fetch('/api/reviews', { method: 'POST', body })
+			if (watchId !== this.watchId) return
+			if (response.status === 429) {
+				this.failFileStart(sheet.rateLimitError)
+				return
+			}
+			if (!response.ok) throw new Error('start')
+			const payload = (await response.json()) as ReviewResource
+			if (watchId !== this.watchId) return
+			this.jobId = payload.id
+			this.applyReview(payload)
+		} catch {
+			if (watchId !== this.watchId) return
+			this.failFileStart(sheet.startError)
+		}
+	}
+
+	failFileStart = (message: string) => {
+		this.returnToIntake()
+		this.error = message
+		void goto('/')
 	}
 
 	dismissPremiere = () => {
@@ -288,8 +345,9 @@ export class ReviewSession {
 	// YouTube のときだけ Next のたびに同意を保存し、/review/:id と /finish/:id の復帰に使う。
 	// ファイルは復帰できないので送らない。
 	recordAgreement = async (key: string) => {
-		if (this.jobId === '' || key === '') return false
+		if (key === '') return false
 		if (this.source !== 'youtube') return true
+		if (this.jobId === '') return false
 		try {
 			const response = await fetch(`/api/reviews/${this.jobId}/agreements`, {
 				method: 'POST',
@@ -344,7 +402,8 @@ export class ReviewSession {
 	refreshReview = async () => {
 		if (this.jobDone) return true
 		const id = this.jobId
-		if (id === '') return false
+		// ファイルは送信中でも誓約を進める
+		if (id === '') return this.source === 'file'
 		const watchId = this.watchId
 		try {
 			const response = await fetch(`/api/reviews/${id}`)
