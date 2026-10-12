@@ -9,7 +9,7 @@
 	let files = $state<FileList | undefined>(undefined)
 	let category = $state<CategoryId | ''>(untrack(() => session.category))
 	let youtubeUrl = $state(untrack(() => session.youtubeUrl))
-	let rawUrl = $state(untrack(() => session.rawUrl))
+	let rawUrl = $state(untrack(() => session.rawUrl || sheet.rawPrefill))
 
 	const hasYoutubeUrl = $derived(youtubeUrl.trim() !== '')
 

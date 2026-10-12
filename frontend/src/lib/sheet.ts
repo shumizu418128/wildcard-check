@@ -36,6 +36,7 @@ export const sheet = {
 	urlPlaceholder: 'https://www.youtube.com/watch?v=',
 	rawLabel: 'Raw file link',
 	rawPlaceholder: 'https://',
+	rawPrefill: 'https://example.com',
 	start: 'Start the review',
 	agree: 'I read this. My submission follows it.',
 	back: 'Go back',
