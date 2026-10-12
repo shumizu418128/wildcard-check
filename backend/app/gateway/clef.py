@@ -17,8 +17,6 @@ def data_url(image: bytes) -> str:
         mime = "image/png"
     elif image.startswith(b"\xff\xd8\xff"):
         mime = "image/jpeg"
-    elif len(image) >= 12 and image.startswith(b"RIFF") and image[8:12] == b"WEBP":
-        mime = "image/webp"
     else:
         raise ValueError("image")
     encoded = base64.b64encode(image).decode("ascii")

@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Callable
 from typing import Any
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -34,6 +35,17 @@ _BLOCKED_ACCESS: dict[YoutubeAccess, str] = {
 }
 
 
+def normalize_review_id(value: str) -> str | None:
+    """空なら空文字、UUID でなければ None を返す。"""
+    value = value.strip()
+    if value == "":
+        return ""
+    try:
+        return str(UUID(value))
+    except ValueError:
+        return None
+
+
 def register(app: FastAPI, origin: Callable[..., Any]) -> None:
     # Render のヘルスチェックは秘密ヘッダーを付けられないので router に入れない
     @app.get("/api/health")
@@ -51,12 +63,16 @@ def register(app: FastAPI, origin: Callable[..., Any]) -> None:
         source: str = Form(...),
         youtube_url: str = Form(""),
         raw_url: str = Form(""),
+        id: str = Form(""),
         intro_audio: UploadFile | None = File(None),
         intro_frame: UploadFile | None = File(None),
         routine_frame: UploadFile | None = File(None),
     ):
         if source not in ("file", "youtube"):
             raise HTTPException(status_code=400, detail="source")
+        review_id = normalize_review_id(id)
+        if review_id is None:
+            raise HTTPException(status_code=400, detail="id")
         source_kind: Source = "file" if source == "file" else "youtube"
         youtube_url = youtube_url.strip()
         raw_url = raw_url.strip()
@@ -77,8 +93,10 @@ def register(app: FastAPI, origin: Callable[..., Any]) -> None:
         create: CreateReview = request.app.state.create_review
         run: RunReviews = request.app.state.run_reviews
         review = await asyncio.to_thread(
-            create.execute, category, source_kind, youtube_url, raw_url
+            create.execute, category, source_kind, youtube_url, raw_url, review_id
         )
+        if review is None:
+            raise HTTPException(status_code=409, detail="id")
         background.add_task(run.execute, ReviewInput(review, clips))
         response.headers["Location"] = f"/api/reviews/{review.id}"
         return present(ReviewView(review, []))

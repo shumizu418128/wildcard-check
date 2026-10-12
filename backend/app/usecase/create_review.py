@@ -9,10 +9,18 @@ class CreateReview:
         self.repository = repository
 
     def execute(
-        self, category: str, source: Source, youtube_url: str, raw_url: str
-    ) -> Review:
+        self,
+        category: str,
+        source: Source,
+        youtube_url: str,
+        raw_url: str,
+        review_id: str = "",
+    ) -> Review | None:
+        """review_id はクライアントが先に発行した ID。既にあれば作らず None を返す。"""
+        if review_id != "" and self.repository.get(review_id) is not None:
+            return None
         review = Review(
-            id=str(uuid7()),
+            id=review_id or str(uuid7()),
             category=category,
             source=source,
             youtube_url=youtube_url,

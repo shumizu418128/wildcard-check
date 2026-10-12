@@ -9,7 +9,7 @@ import { categories, sheet, type CategoryId, type RuleStatus, type SourceKind } 
 import { fetchYoutubeTitle, titleMatches } from '$lib/title-format'
 import { ensureDebugMode } from '$lib/debug'
 import { extractReviewClips } from '$lib/extract-clips'
-import { isNonPublicUrlCode, isShortsUrl, shortsUrlCode } from '$lib/youtube'
+import { isNonPublicUrlCode, isShortsUrl } from '$lib/youtube'
 
 export const reviewSessionKey = 'review-session'
 
@@ -63,11 +63,12 @@ export class ReviewSession {
 	abortMessage = $state('')
 	abortKind = $state<AbortKind | ''>('')
 	abortTitle = $state('')
-	preparing = $state(false)
 	submitting = $state(false)
 	advancing = $state(false)
 	localVideoUrl = $state('')
 	jobId = ''
+	creating = false
+	pendingAgreements: string[] = []
 	watchId = 0
 
 	releaseLocalVideo = () => {
@@ -125,66 +126,18 @@ export class ReviewSession {
 		this.resetForStart()
 
 		if (this.source === 'file') {
-			await this.startFile(file)
+			await this.startWork(file, (watchId) => this.submitFile(file, watchId))
 			return
 		}
-
-		try {
-			if (isShortsUrl(youtubeUrl)) {
-				this.abortReview(sheet.shortsUrlError, 'shorts')
-				return
-			}
-			await ensureDebugMode()
-			const foundTitle = await fetchYoutubeTitle(youtubeUrl, this.category)
-			if (!titleMatches(foundTitle, this.category)) {
-				this.abortReview(sheet.titleUrlError, 'title', foundTitle)
-				return
-			}
-			this.preparing = true
-			const clips = await extractReviewClips(file)
-			const body = new FormData()
-			body.set('category', this.category)
-			body.set('source', 'youtube')
-			body.set('youtube_url', youtubeUrl)
-			body.set('raw_url', rawUrl)
-			body.set('intro_audio', clips.introAudio, 'intro.wav')
-			body.set('intro_frame', clips.introFrame, 'intro.jpg')
-			body.set('routine_frame', clips.routineFrame, 'routine.jpg')
-			this.preparing = false
-			this.releaseLocalVideo()
-			this.localVideoUrl = URL.createObjectURL(file)
-			this.stopWatch()
-			const response = await fetch('/api/reviews', { method: 'POST', body })
-			if (response.status === 429) {
-				this.releaseLocalVideo()
-				this.error = sheet.rateLimitError
-				return
-			}
-			if (!response.ok) {
-				const detail = await readErrorDetail(response)
-				if (detail === shortsUrlCode) {
-					this.abortReview(sheet.shortsUrlError, 'shorts')
-					return
-				}
-				if (isNonPublicUrlCode(detail)) {
-					this.abortReview(sheet.visibilityUrlError, 'visibility')
-					return
-				}
-				throw new Error('start')
-			}
-			const payload = (await response.json()) as ReviewResource
-			this.takeRawUrl(payload)
-			this.jobId = payload.id
-			this.phase = 'work'
-			this.applyReview(payload)
-			if (this.phase === 'work') await goto(this.reviewPath())
-		} catch {
-			this.releaseLocalVideo()
-			this.error = sheet.startError
-		} finally {
-			this.preparing = false
+		if (isShortsUrl(youtubeUrl)) {
+			this.abortReview(sheet.shortsUrlError, 'shorts')
 			this.submitting = false
+			return
 		}
+		// 送信前に ID を決めて /review/:id へ進み、同意もこの ID で保存する
+		this.jobId = crypto.randomUUID()
+		const id = this.jobId
+		await this.startWork(file, (watchId) => this.submitYoutube(file, id, youtubeUrl, rawUrl, watchId))
 	}
 
 	resetForStart = () => {
@@ -201,21 +154,78 @@ export class ReviewSession {
 		this.rules = []
 		this.jobDone = false
 		this.jobId = ''
+		this.creating = false
+		this.pendingAgreements = []
 		this.advancing = false
 	}
 
 	// 切り出しと送信を待たずに誓約へ進め、その間に裏で送る
-	startFile = async (file: File) => {
+	startWork = async (file: File, submit: (watchId: number) => Promise<void>) => {
 		this.releaseLocalVideo()
 		this.localVideoUrl = URL.createObjectURL(file)
 		this.stopWatch()
 		const watchId = this.watchId
+		this.creating = true
 		this.phase = 'work'
-		void this.submitFile(file, watchId)
+		void submit(watchId)
 		try {
 			await goto(this.reviewPath())
 		} finally {
 			this.submitting = false
+		}
+	}
+
+	submitYoutube = async (
+		file: File,
+		id: string,
+		youtubeUrl: string,
+		rawUrl: string,
+		watchId: number,
+	) => {
+		try {
+			await ensureDebugMode()
+			const foundTitle = await fetchYoutubeTitle(youtubeUrl, this.category)
+			if (watchId !== this.watchId) return
+			if (!titleMatches(foundTitle, this.category)) {
+				this.abortReview(sheet.titleUrlError, 'title', foundTitle)
+				return
+			}
+			const clips = await extractReviewClips(file)
+			if (watchId !== this.watchId) return
+			const body = new FormData()
+			body.set('id', id)
+			body.set('category', this.category)
+			body.set('source', 'youtube')
+			body.set('youtube_url', youtubeUrl)
+			body.set('raw_url', rawUrl)
+			body.set('intro_audio', clips.introAudio, 'intro.wav')
+			body.set('intro_frame', clips.introFrame, 'intro.jpg')
+			body.set('routine_frame', clips.routineFrame, 'routine.jpg')
+			const response = await fetch('/api/reviews', { method: 'POST', body })
+			if (watchId !== this.watchId) return
+			if (response.status === 429) {
+				this.failStart(sheet.rateLimitError)
+				return
+			}
+			if (!response.ok) {
+				const detail = await readErrorDetail(response)
+				if (watchId !== this.watchId) return
+				if (isNonPublicUrlCode(detail)) {
+					this.abortReview(sheet.visibilityUrlError, 'visibility')
+					return
+				}
+				throw new Error('start')
+			}
+			const payload = (await response.json()) as ReviewResource
+			if (watchId !== this.watchId) return
+			this.creating = false
+			await this.flushAgreements()
+			if (watchId !== this.watchId) return
+			this.takeRawUrl(payload)
+			this.applyReview(payload)
+		} catch {
+			if (watchId !== this.watchId) return
+			this.failStart(sheet.startError)
 		}
 	}
 
@@ -232,21 +242,22 @@ export class ReviewSession {
 			const response = await fetch('/api/reviews', { method: 'POST', body })
 			if (watchId !== this.watchId) return
 			if (response.status === 429) {
-				this.failFileStart(sheet.rateLimitError)
+				this.failStart(sheet.rateLimitError)
 				return
 			}
 			if (!response.ok) throw new Error('start')
 			const payload = (await response.json()) as ReviewResource
 			if (watchId !== this.watchId) return
 			this.jobId = payload.id
+			this.creating = false
 			this.applyReview(payload)
 		} catch {
 			if (watchId !== this.watchId) return
-			this.failFileStart(sheet.startError)
+			this.failStart(sheet.startError)
 		}
 	}
 
-	failFileStart = (message: string) => {
+	failStart = (message: string) => {
 		this.returnToIntake()
 		this.error = message
 		void goto('/')
@@ -313,6 +324,22 @@ export class ReviewSession {
 		if (key === '') return false
 		if (this.source !== 'youtube') return true
 		if (this.jobId === '') return false
+		this.pendingAgreements = [...this.pendingAgreements, key]
+		// 審査の作成前はまだ保存先がないので、作成後に submitYoutube が送る
+		if (this.creating) return true
+		return this.flushAgreements()
+	}
+
+	// サーバーは同じ同意を重ねて保存しないので、並行して送っても壊れない
+	flushAgreements = async () => {
+		for (const key of this.pendingAgreements) {
+			if (!(await this.postAgreement(key))) return false
+			this.pendingAgreements = this.pendingAgreements.filter((pending) => pending !== key)
+		}
+		return true
+	}
+
+	postAgreement = async (key: string) => {
 		try {
 			const response = await fetch(`/api/reviews/${this.jobId}/agreements`, {
 				method: 'POST',
@@ -366,9 +393,10 @@ export class ReviewSession {
 
 	refreshReview = async () => {
 		if (this.jobDone) return true
+		// 審査の作成を待たずに誓約を進める
+		if (this.creating) return true
 		const id = this.jobId
-		// ファイルは送信中でも誓約を進める
-		if (id === '') return this.source === 'file'
+		if (id === '') return false
 		const watchId = this.watchId
 		try {
 			const response = await fetch(`/api/reviews/${id}`)
@@ -408,7 +436,7 @@ export class ReviewSession {
 	}
 
 	pollReview = async () => {
-		if (this.advancing || this.jobDone || this.jobId === '') return
+		if (this.advancing || this.jobDone || this.creating || this.jobId === '') return
 		this.advancing = true
 		const watchId = this.watchId
 		try {
@@ -580,12 +608,13 @@ export class ReviewSession {
 		this.rules = []
 		this.jobDone = false
 		this.jobId = ''
+		this.creating = false
+		this.pendingAgreements = []
 		this.advancing = false
 		this.error = ''
 		this.abortMessage = ''
 		this.abortKind = ''
 		this.abortTitle = ''
-		this.preparing = false
 		this.submitting = false
 	}
 

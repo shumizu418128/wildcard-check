@@ -643,6 +643,91 @@ class ClipUploadTests(unittest.TestCase):
         self.assertTrue(run.seen.clips.routine_frame.startswith(b"\xff\xd8"))
 
 
+class ClientIdTests(unittest.TestCase):
+    review_id = "0b5c2f6e-4d1a-4c3e-9f7b-2a8d6e1c9b40"
+
+    def test_client_id_becomes_the_review_id(self):
+        client = TestClient(build_api())
+        response = client.post(
+            "/api/reviews",
+            data={"category": "solo", "source": "file", "id": self.review_id.upper()},
+            files={
+                "intro_audio": ("intro.wav", wav_bytes(), "audio/wav"),
+                "intro_frame": ("intro.jpg", jpeg_bytes(), "image/jpeg"),
+                "routine_frame": ("routine.jpg", jpeg_bytes(), "image/jpeg"),
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["id"], self.review_id)
+
+    def post_with_id(self, client: TestClient, review_id: str):
+        return client.post(
+            "/api/reviews",
+            data={"category": "solo", "source": "file", "id": review_id},
+            files={
+                "intro_audio": ("intro.wav", wav_bytes(), "audio/wav"),
+                "intro_frame": ("intro.jpg", jpeg_bytes(), "image/jpeg"),
+                "routine_frame": ("routine.jpg", jpeg_bytes(), "image/jpeg"),
+            },
+        )
+
+    def test_invalid_ids_are_rejected(self):
+        invalid = (
+            "job",
+            "12345",
+            self.review_id[:-1],
+            self.review_id + "0",
+            self.review_id.replace("-", "_"),
+            "0b5c2f6e-4d1a-4c3e-9f7b-2a8d6e1c9bzz",
+            "../" + self.review_id,
+            self.review_id + "/agreements",
+            "' OR 1=1 --",
+        )
+        for review_id in invalid:
+            with self.subTest(review_id=review_id):
+                client = TestClient(build_api())
+                response = self.post_with_id(client, review_id)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json()["detail"], "id")
+
+    def test_invalid_id_is_rejected_before_clips_are_read(self):
+        client = TestClient(build_api())
+        response = client.post(
+            "/api/reviews",
+            data={"category": "solo", "source": "file", "id": "job"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "id")
+
+    def test_rejected_id_does_not_count_toward_the_rate_limit(self):
+        client = TestClient(build_api())
+        self.assertEqual(self.post_with_id(client, "job").status_code, 400)
+        self.assertEqual(self.post_with_id(client, self.review_id).status_code, 201)
+
+    def test_blank_id_falls_back_to_a_server_id(self):
+        client = TestClient(build_api())
+        response = self.post_with_id(client, "  ")
+        self.assertEqual(response.status_code, 201)
+        self.assertNotEqual(response.json()["id"], "")
+
+    def test_taken_id_returns_conflict(self):
+        app = build_api()
+        first = TestClient(app, client=("192.0.2.1", 50000))
+        second = TestClient(app, client=("192.0.2.2", 50000))
+        self.assertEqual(self.post_with_id(first, self.review_id).status_code, 201)
+        response = self.post_with_id(second, self.review_id)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"], "id")
+
+    def test_taken_id_is_not_created_again(self):
+        repository = MemoryRepository()
+        create = CreateReview(repository)
+        first = create.execute("solo", "youtube", "u", "r", self.review_id)
+        self.assertIsNotNone(first)
+        self.assertIsNone(create.execute("crew", "youtube", "u", "r", self.review_id))
+        self.assertEqual(repository.reviews[self.review_id].category, "solo")
+
+
 class RateLimitTests(unittest.TestCase):
     def test_second_review_within_window_is_rejected(self):
         client = TestClient(build_api())

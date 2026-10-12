@@ -5,9 +5,6 @@ const videoIdPattern = /^[A-Za-z0-9_-]{11}$/
 
 const pathMarkers = new Set(['embed', 'shorts', 'live', 'v'])
 
-/** `detail` returned by `POST /api/reviews` when the URL is a Short. */
-export const shortsUrlCode = 'shorts_url'
-
 /** `detail` when the video is private or unlisted. */
 export const privateUrlCode = 'private_url'
 export const unlistedUrlCode = 'unlisted_url'

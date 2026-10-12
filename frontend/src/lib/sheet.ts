@@ -59,7 +59,6 @@ export const sheet = {
 	openHeading: 'Still open',
 	pledgeNoted: 'Agreed',
 	pledgeOpen: 'Not yet',
-	preparingClips: 'Reading the opening of this file. Large files take longer.',
 	startError: "Couldn't start the review. Fix your input and try again.",
 	rateLimitError: 'Too many reviews in a row. Wait 10 seconds and try again.',
 	streamError: 'The review was interrupted. Start again.',

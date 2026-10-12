@@ -357,6 +357,8 @@ test('a title that does not match ends the review', async ({ page }) => {
 	await page.getByRole('textbox', { name: 'YouTube URL' }).fill('https://www.youtube.com/watch?v=abcdefghijk')
 	await fillRaw(page)
 	await page.getByRole('button', { name: 'Start the review' }).click()
+	// タイトルは誓約へ進んだあと裏で確かめる
+	await expect(page).toHaveURL(/\/review\/[^/]+$/)
 	const dialog = page.getByRole('alertdialog')
 	await expect(dialog).toBeVisible()
 	await expect(dialog.getByRole('heading', { name: 'Video title' })).toBeVisible()
@@ -364,11 +366,11 @@ test('a title that does not match ends the review', async ({ page }) => {
 	await expect(dialog.getByText("This title doesn't match. Use one of these.")).toBeVisible()
 	await expect(dialog.getByText('A different title.')).toBeVisible()
 	await expect(dialog.getByRole('checkbox')).toHaveCount(0)
-	await expect(page).toHaveURL(/\/$/)
 	await expect(page.getByRole('heading', { name: 'You only get one submission' })).toHaveCount(0)
 	await expectCloseAtTopRight(dialog)
 	await dialog.getByRole('button', { name: 'End the review' }).click()
 	await expect(dialog).toBeHidden()
+	await expect(page).toHaveURL(/\/$/)
 	await expect(page.getByRole('textbox', { name: 'YouTube URL' })).toHaveValue(
 		'https://www.youtube.com/watch?v=abcdefghijk',
 	)
@@ -436,7 +438,7 @@ test('a team visibility pledge appears once without an automatic review', async 
 	await fillRaw(page)
 	await stubYoutubeTitle(page, passingTagTitle)
 	await page.getByRole('button', { name: 'Start the review' }).click()
-	await expect(page).toHaveURL(/\/review\/job-team-vis$/)
+	await expect(page).toHaveURL(/\/review\/[^/]+$/)
 
 	const headings: string[] = []
 	for (let step = 0; step < 20; step += 1) {
@@ -493,7 +495,7 @@ test('an unfinished review can ask you to wait partway through', async ({ page }
 	await expect(page.getByTestId('wait-elapsed')).toContainText('0:0')
 	await expect(page.getByTestId('wait-elapsed')).not.toContainText('0:00')
 	await expect(page.getByTestId('auto-error')).toHaveCount(0)
-	await expect(page).toHaveURL(/\/review\/job-wait$/)
+	await expect(page).toHaveURL(/\/review\/[^/]+$/)
 	await expect(page.getByTestId('outcome')).toHaveCount(0)
 })
 
@@ -536,12 +538,13 @@ const fulfillResumable = async (page: Page) => {
 			await route.fulfill({ status: 204 })
 			return
 		}
+		const id = new URL(request.url()).pathname.split('/').at(-1)
 		await route.fulfill({
 			status: request.method() === 'POST' ? 201 : 200,
 			contentType: 'application/json',
 			body: JSON.stringify({
 				...doneReview,
-				id: 'job-resume',
+				id,
 				category: 'solo',
 				source: 'youtube',
 				youtube_url: 'https://www.youtube.com/watch?v=abcdefghijk',
@@ -557,25 +560,60 @@ test('a YouTube review resumes from the same step after a reload', async ({ page
 	const agreements = await fulfillResumable(page)
 	page.on('dialog', (dialog) => void dialog.accept())
 	await startYoutube(page)
-	await expect(page).toHaveURL(/\/review\/job-resume$/)
+	const id = new URL(page.url()).pathname.split('/').at(-1) ?? ''
 	await agreeAndLeave(page)
 	await agreeAndLeave(page)
-	expect(agreements).toHaveLength(2)
+	await expect.poll(() => agreements.length).toBe(2)
 	const heading = await stepMark(page)
 
 	await page.reload()
-	await expect(page).toHaveURL(/\/review\/job-resume$/)
+	await expect(page).toHaveURL(`/review/${id}`)
 	await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
 
 	for (let step = 0; step < 24; step += 1) {
 		if (await page.getByTestId('outcome').isVisible()) break
 		await agreeAndLeave(page)
 	}
-	await expect(page).toHaveURL(/\/finish\/job-resume$/)
+	await expect(page).toHaveURL(`/finish/${id}`)
 
 	await page.reload()
-	await expect(page).toHaveURL(/\/finish\/job-resume$/)
+	await expect(page).toHaveURL(`/finish/${id}`)
 	await expect(page.getByTestId('outcome')).toBeVisible()
+})
+
+test('a YouTube review opens the pledges before the upload finishes', async ({ page }) => {
+	const agreed: string[] = []
+	let release = () => {}
+	const held = new Promise<void>((resolve) => {
+		release = resolve
+	})
+	let postedId = ''
+	await page.route('**/api/reviews**', async (route) => {
+		const request = route.request()
+		if (request.url().endsWith('/agreements')) {
+			agreed.push(request.url())
+			await route.fulfill({ status: 204 })
+			return
+		}
+		if (request.method() === 'POST') {
+			postedId = /name="id"\r\n\r\n([^\r]+)\r\n/.exec(request.postData() ?? '')?.[1] ?? ''
+			await held
+		}
+		await route.fulfill({
+			status: request.method() === 'POST' ? 201 : 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ ...runningReview, id: postedId }),
+		})
+	})
+	await startYoutube(page)
+	const id = new URL(page.url()).pathname.split('/').at(-1) ?? ''
+	await expect(page.getByRole('heading', { name: 'You only get one submission' })).toBeVisible()
+	await agreeAndLeave(page)
+	expect(agreed).toHaveLength(0)
+
+	await expect.poll(() => postedId).toBe(id)
+	release()
+	await expect.poll(() => agreed).toEqual([expect.stringContaining(`/api/reviews/${id}/agreements`)])
 })
 
 test('a YouTube review sends clips cut from the file', async ({ page }) => {
@@ -601,9 +639,11 @@ test('a YouTube review sends clips cut from the file', async ({ page }) => {
 		})
 	})
 	await startYoutube(page)
-	await expect(page).toHaveURL(/\/review\/job-youtube-file$/)
+	const id = new URL(page.url()).pathname.split('/').at(-1) ?? ''
 	await expect(page.getByRole('heading', { name: 'You only get one submission' })).toBeVisible()
+	await expect.poll(() => posted).not.toBe('')
 	// 動画本体ではなく、切り出した素材と URL を一度に送る
+	expect(posted).toContain(`name="id"\r\n\r\n${id}\r\n`)
 	expect(posted).toMatch(/name="source"\r\n\r\nyoutube\r\n/)
 	expect(posted).toContain('abcdefghijk')
 	expect(posted).toContain(rawLink)

@@ -36,7 +36,6 @@
 			class="field-input mt-2"
 			required
 			onchange={applyCategory}
-			onchangecapture={applyCategory}
 		>
 			<option value="" selected={category === ''}>{sheet.categoryPlaceholder}</option>
 			{#each categories as item (item.id)}
@@ -101,10 +100,6 @@
 				bind:value={rawUrl}
 			/>
 		</div>
-	{/if}
-
-	{#if session.preparing}
-		<p class="text-[16px] leading-6 text-muted" data-testid="preparing-clips">{sheet.preparingClips}</p>
 	{/if}
 
 	{#if session.error}
